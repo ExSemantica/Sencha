@@ -1,8 +1,8 @@
 ARG MIX_ENV="prod" # The Mix environment to build, probably should be "prod"
 
-ARG USE_ERLANG="27.2" # The Erlang/OTP version to use
-ARG USE_ELIXIR="1.18.1" # The Elixir version to use
-ARG USE_ALPINE="3.21.0" # The Alpine Linux OS version to use
+ARG USE_ERLANG="27.2.1" # The Erlang/OTP version to use
+ARG USE_ELIXIR="1.18.2" # The Elixir version to use
+ARG USE_ALPINE="3.21.2" # The Alpine Linux OS version to use
 
 # === BUILDER =================================================================
 FROM hexpm/elixir:${USE_ELIXIR}-erlang-${USE_ERLANG}-alpine-${USE_ALPINE} as build
