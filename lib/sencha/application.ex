@@ -15,10 +15,13 @@ defmodule Sencha.Application do
     children = [
       # Starts a worker by calling: Sencha.Worker.start_link(arg)
       # {Sencha.Worker, arg}
-      {ThousandIsland, port: 6667, handler_module: Sencha.Chat},
-
-      {Registry, keys: :unique, name: Sencha.Chat.ChannelRegistry},
-      {Registry, keys: :unique, name: Sencha.Chat.UserRegistry},
+      {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
+      Sencha.ChannelSupervisor,
+      Sencha.UserSupervisor,
+      {Registry, keys: :unique, name: Sencha.ChannelRegistry},
+      {Registry, keys: :unique, name: Sencha.UserRegistry},
+      {Cluster.Supervisor,
+       [Application.get_env(:libcluster, :topologies), [name: Sencha.ClusterSupervisor]]}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
