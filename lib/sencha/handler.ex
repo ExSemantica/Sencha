@@ -160,7 +160,7 @@ defmodule Sencha.Handler do
               ping_timer: Process.send_after(self(), :ping, @ping_interval)
           }, @ping_interval + @ping_timeout}
 
-      {_socket, state} ->
+      {socket, state} ->
         {:continue, state, socket.read_timeout}
     end
   end
