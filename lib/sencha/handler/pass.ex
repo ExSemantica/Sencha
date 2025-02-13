@@ -50,4 +50,12 @@ defmodule Sencha.Handler.Pass do
           requested_password: password
       }}}
   end
+
+  def handle(message, socket_state = {socket, state}) do
+    IO.inspect message
+    IO.inspect socket
+    IO.inspect state
+
+    {:cont, socket_state}
+  end
 end
