@@ -129,13 +129,12 @@ defmodule Sencha.Handler do
     reduced = messages |> Enum.reduce_while({socket, state}, &handle_while/2)
 
     case reduced do
-      {:cont,
-       {socket,
+      {socket,
         state = %__MODULE__.UserState{
           irc_state: :authentication_ready,
           requested_handle: handle,
           requested_password: password
-        }}} ->
+        }} ->
         # TODO: error cases
         {:ok, real_handle} = lookup_via_gateway(handle, password)
 
@@ -151,8 +150,8 @@ defmodule Sencha.Handler do
               ping_timer: Process.send_after(self(), :ping, @ping_interval)
           }}, @ping_interval + @ping_timeout}
 
-      {:cont,
-       {socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}}} ->
+      
+       {socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}} ->
         if not is_nil(ping_timer), do: Process.cancel_timer(ping_timer)
 
         {:continue,
@@ -163,7 +162,7 @@ defmodule Sencha.Handler do
               ping_timer: Process.send_after(self(), :ping, @ping_interval)
           }}, @ping_interval + @ping_timeout}
 
-      {:cont, socket_state} ->
+      socket_state ->
         {:continue, socket_state, socket.read_timeout}
     end
   end
