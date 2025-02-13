@@ -6,7 +6,7 @@ defmodule Sencha.Gateway do
     Node.list() |> Enum.map(& GenServer.cast({Exsemantica.Gateway, &1}, {:ping, self()}))
 
     receive do
-      {ExSemantica.Gateway, fastest, :pong} ->
+      {Exsemantica.Gateway, fastest, :pong} ->
         fastest
     after
       500 ->
@@ -15,10 +15,10 @@ defmodule Sencha.Gateway do
   end
 
   def user_info(target, pid, username, password) do
-    GenServer.cast({__MODULE__, target}, {:user_info, pid, username, password})
+    GenServer.cast({Exsemantica.Gateway, target}, {:user_info, pid, username, password})
   end
 
   def aggregate_info(target, pid, aggregate) do
-    GenServer.cast({__MODULE__, target}, {:aggregate_info, pid, aggregate})
+    GenServer.cast({Exsemantica.Gateway, target}, {:aggregate_info, pid, aggregate})
   end
 end
