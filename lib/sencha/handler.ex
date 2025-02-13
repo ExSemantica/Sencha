@@ -86,7 +86,12 @@ defmodule Sencha.Handler do
       ) do
     socket
     |> ThousandIsland.Socket.send(
-      %Sencha.Message{prefix: source, command: "NOTICE", params: [requested_handle], trailing: message}
+      %Sencha.Message{
+        prefix: source,
+        command: "NOTICE",
+        params: [requested_handle],
+        trailing: message
+      }
       |> Sencha.Message.encode()
     )
 
@@ -100,7 +105,12 @@ defmodule Sencha.Handler do
       ) do
     socket
     |> ThousandIsland.Socket.send(
-      %Sencha.Message{prefix: source, command: "PRIVMSG", params: [requested_handle], trailing: message}
+      %Sencha.Message{
+        prefix: source,
+        command: "PRIVMSG",
+        params: [requested_handle],
+        trailing: message
+      }
       |> Sencha.Message.encode()
     )
 
@@ -111,7 +121,7 @@ defmodule Sencha.Handler do
   def handle_info(:ping, {socket, state = %UserState{connected?: true}}) do
     socket
     |> ThousandIsland.Socket.send(
-      %Sencha.Message{command: "PING", trailing: ApplicationInfo.get_chat_hostname()}
+      %Sencha.Message{prefix: Sencha.ApplicationInfo.get_chat_hostname(), command: "PING"}
       |> Sencha.Message.encode()
     )
 
@@ -343,6 +353,10 @@ defmodule Sencha.Handler do
 
   defp handle_while(message = %Sencha.Message{command: "PONG"}, socket_state) do
     __MODULE__.Pong.handle(message, socket_state)
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "PING"}, socket_state) do
+    __MODULE__.Ping.handle(message, socket_state)
   end
 
   defp handle_while(message, socket_state) do
