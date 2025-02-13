@@ -108,7 +108,7 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(:send_ping, {socket, state = %UserState{connected?: true}}) do
+  def handle_info(:ping, {socket, state = %UserState{connected?: true}}) do
     socket
     |> ThousandIsland.Socket.send(
       %Message{command: "PING", trailing: ApplicationInfo.get_chat_hostname()}
@@ -181,12 +181,6 @@ defmodule Sencha.Handler do
                   },
                   %Sencha.Message{
                     prefix: host,
-                    command: "005",
-                    params: [real_handle],
-                    trailing: "are supported by this server"
-                  },
-                  %Sencha.Message{
-                    prefix: host,
                     command: "422",
                     params: [real_handle],
                     trailing: "MOTD File is unimplemented"
@@ -205,7 +199,7 @@ defmodule Sencha.Handler do
                      requested_handle: real_handle,
                      requested_password: nil,
                      ping_received?: false,
-                     ping_timer: Process.send_after(self(), :ping, @ping_interval),
+                     ping_timer: send(self(), :ping),
                      user_process: user_status_pid
                  }, @ping_interval + @ping_timeout}
 
