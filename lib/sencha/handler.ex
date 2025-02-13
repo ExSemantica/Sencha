@@ -130,35 +130,131 @@ defmodule Sencha.Handler do
 
     case reduced do
       {_socket,
-        state = %__MODULE__.UserState{
-          irc_state: :authentication_ready,
-          requested_handle: handle,
-          requested_password: password
-        }} ->
+       state = %__MODULE__.UserState{
+         irc_state: :authentication_ready,
+         requested_handle: handle,
+         requested_password: password
+       }} ->
         # TODO: error cases
-        {:ok, real_handle} = lookup_via_gateway(handle, password)
+        info = lookup_via_gateway(handle, password)
+        host = Sencha.ApplicationInfo.get_chat_hostname()
 
-        {:continue,
-          %__MODULE__.UserState{
-            state
-            | irc_state: :connected,
-              connected?: true,
-              requested_handle: real_handle,
-              requested_password: nil,
-              ping_received?: false,
-              ping_timer: Process.send_after(self(), :ping, @ping_interval)
-          }, @ping_interval + @ping_timeout}
+        case info do
+          {:ok, %{username: real_handle}} ->
+            user_status = Sencha.UserSupervisor.start_child(real_handle, self())
 
-      
-       {_socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}} ->
+            case user_status do
+              {:ok, user_status_pid} ->
+                Logger.debug("#{real_handle} connects")
+
+                refreshed =
+                  Sencha.ApplicationInfo.get_last_refreshed()
+                  |> Calendar.strftime("%a, %-d %b %Y %X %Z")
+
+                user_status_pid |> __MODULE__.User.set_modes(["+w"])
+
+                version = Sencha.ApplicationInfo.get_version()
+
+                burst = [
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "001",
+                    params: [real_handle],
+                    trailing: "Welcome to Sencha, " <> real_handle
+                  },
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "002",
+                    params: [real_handle],
+                    trailing: "Your host is " <> host <> ", running version v" <> version
+                  },
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "003",
+                    params: [real_handle],
+                    trailing: "This server was last restarted " <> refreshed
+                  },
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "004",
+                    params: [real_handle, "sencha", version]
+                  },
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "005",
+                    params: [real_handle],
+                    trailing: "are supported by this server"
+                  },
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "422",
+                    params: [real_handle],
+                    trailing: "MOTD File is unimplemented"
+                  }
+                ]
+
+                for b <- burst do
+                  socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
+                end
+
+                {:continue,
+                 %__MODULE__.UserState{
+                   state
+                   | irc_state: :connected,
+                     connected?: true,
+                     requested_handle: real_handle,
+                     requested_password: nil,
+                     ping_received?: false,
+                     ping_timer: Process.send_after(self(), :ping, @ping_interval),
+                     user_process: user_status_pid
+                 }, @ping_interval + @ping_timeout}
+
+              {:error, {:already_started, _}} ->
+                socket
+                |> ThousandIsland.Socket.send(
+                  %Sencha.Message{
+                    prefix: host,
+                    command: "433",
+                    params: [real_handle],
+                    trailing: "Nickname is already in use"
+                  }
+                  |> Sencha.Message.encode()
+                )
+
+                {socket, state} |> quit("Nickname is already in use")
+                {:close, state}
+
+              {:error, :max_children} ->
+                {socket, state} |> quit("Too many users logged in to this server")
+                {:close, state}
+            end
+
+          {:error, :authentication_failed} ->
+            {socket, state} |> quit("Authentication failed")
+            {:close, state}
+
+          {:error, :no_such_item} ->
+            {socket, state} |> quit("Invalid user")
+            {:close, state}
+
+          {:error, :no_gateway} ->
+            {socket, state} |> quit("No gateway available to handle user information")
+            {:close, state}
+
+          {:error, :gateway_timeout} ->
+            {socket, state} |> quit("User information gateway timeout")
+            {:close, state}
+        end
+
+      {_socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}} ->
         if not is_nil(ping_timer), do: Process.cancel_timer(ping_timer)
 
         {:continue,
-          %__MODULE__.UserState{
-            state
-            | ping_received?: false,
-              ping_timer: Process.send_after(self(), :ping, @ping_interval)
-          }, @ping_interval + @ping_timeout}
+         %__MODULE__.UserState{
+           state
+           | ping_received?: false,
+             ping_timer: Process.send_after(self(), :ping, @ping_interval)
+         }, @ping_interval + @ping_timeout}
 
       {socket, state} ->
         {:continue, state, socket.read_timeout}
@@ -178,7 +274,9 @@ defmodule Sencha.Handler do
 
   @impl ThousandIsland.Handler
   def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
-    Sencha.UserSupervisor.terminate_child(user_process)
+    if Process.alive?(user_process) do
+      Sencha.UserSupervisor.terminate_child(user_process)
+    end
   end
 
   # ===========================================================================

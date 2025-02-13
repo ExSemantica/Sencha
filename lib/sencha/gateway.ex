@@ -3,7 +3,7 @@ defmodule Sencha.Gateway do
   Bridges Sencha with ExSemantica's database
   """
   def fastest_node do
-    Node.list() |> Enum.map(& GenServer.cast({Exsemantica.Gateway, &1}, {:ping, self()}))
+    Node.list() |> Enum.map(&GenServer.cast({Exsemantica.Gateway, &1}, {:ping, self()}))
 
     receive do
       {Exsemantica.Gateway, fastest, :pong} ->

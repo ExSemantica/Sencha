@@ -26,6 +26,7 @@ defmodule Sencha.Handler.Pass do
           requested_password: password
       }}}
   end
+
   # Compliant ones:
   def handle(
         %Sencha.Message{command: "PASS", params: [password]},

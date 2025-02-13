@@ -147,7 +147,11 @@ defmodule Sencha.Channel do
     if is_nil(fastest_node) do
       {:error, :no_gateway}
     else
-      Sencha.Gateway.aggregate_info(fastest_node, self(), aggregate |> String.replace_prefix("#", ""))
+      Sencha.Gateway.aggregate_info(
+        fastest_node,
+        self(),
+        aggregate |> String.replace_prefix("#", "")
+      )
 
       receive do
         {Exsemantica.Gateway, ^fastest_node, {:aggregate_info, {:ok, info}}} ->
