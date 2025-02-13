@@ -86,8 +86,8 @@ defmodule Sencha.Handler do
       ) do
     socket
     |> ThousandIsland.Socket.send(
-      %Message{prefix: source, command: "NOTICE", params: [requested_handle], trailing: message}
-      |> Message.encode()
+      %Sencha.Message{prefix: source, command: "NOTICE", params: [requested_handle], trailing: message}
+      |> Sencha.Message.encode()
     )
 
     {:noreply, {socket, state}, socket.read_timeout}
@@ -100,8 +100,8 @@ defmodule Sencha.Handler do
       ) do
     socket
     |> ThousandIsland.Socket.send(
-      %Message{prefix: source, command: "PRIVMSG", params: [requested_handle], trailing: message}
-      |> Message.encode()
+      %Sencha.Message{prefix: source, command: "PRIVMSG", params: [requested_handle], trailing: message}
+      |> Sencha.Message.encode()
     )
 
     {:noreply, {socket, state}, socket.read_timeout}
@@ -111,8 +111,8 @@ defmodule Sencha.Handler do
   def handle_info(:ping, {socket, state = %UserState{connected?: true}}) do
     socket
     |> ThousandIsland.Socket.send(
-      %Message{command: "PING", trailing: ApplicationInfo.get_chat_hostname()}
-      |> Message.encode()
+      %Sencha.Message{command: "PING", trailing: ApplicationInfo.get_chat_hostname()}
+      |> Sencha.Message.encode()
     )
 
     {:noreply, {socket, state}, socket.read_timeout}
