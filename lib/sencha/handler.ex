@@ -359,6 +359,11 @@ defmodule Sencha.Handler do
     __MODULE__.Ping.handle(message, socket_state)
   end
 
+  defp handle_while(message = %Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
+    socket_state |> quit("Client quit: " <> reason)
+  end
+
+
   defp handle_while(message, socket_state) do
     Logger.debug("Unimplemented IRC message: #{inspect(message)}")
     {:cont, socket_state}
