@@ -30,7 +30,10 @@ defmodule Sencha.ApplicationInfo do
 
     # Put the chat hostname in a persistent_term so we can send it as a prefix
     # HexChat is picky about it
-    :persistent_term.put(__MODULE__.ChatHostname, Application.get_env(:sencha, __MODULE__)[:chat_hostname])
+    :persistent_term.put(
+      __MODULE__.ChatHostname,
+      Application.get_env(:sencha, __MODULE__)[:chat_hostname]
+    )
   end
 
   @doc """

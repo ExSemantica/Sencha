@@ -17,6 +17,7 @@ defmodule Sencha.User do
       name: where
     )
   end
+
   # ===========================================================================
   @doc """
   Gets this user's handle
@@ -48,7 +49,7 @@ defmodule Sencha.User do
       |> Enum.reduce(state, &chunk_modes/2)
     end)
   end
-  
+
   # ===========================================================================
   @doc """
   Helper for sending wallops

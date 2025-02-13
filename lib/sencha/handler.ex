@@ -29,9 +29,10 @@ defmodule Sencha.Handler do
               ping_timer: nil,
               authentication_timer: nil,
               user_process: nil,
-              ident: "sencha",
+              ident: "~Sencha",
               vhost: nil,
-              connected?: false
+              connected?: false,
+              ping_received?: false
 
     def get_host_mask(%__MODULE__{requested_handle: handle, ident: ident, vhost: vhost}) do
       handle <> "!" <> ident <> "@" <> vhost
@@ -114,21 +115,78 @@ defmodule Sencha.Handler do
       |> Message.encode()
     )
 
-    {:noreply, {socket, state}, @ping_timeout}
+    {:noreply, {socket, state}, socket.read_timeout}
   end
 
   # ===========================================================================
   # Data handling
   # ===========================================================================
+  @impl ThousandIsland.Handler
+  def handle_data(data, socket, state) do
+    # Decode all received messages
+    messages = data |> Sencha.Message.decode()
+
+    reduced = messages |> Enum.reduce_while({socket, state}, &handle_while/2)
+
+    case reduced do
+      {:cont,
+       {socket,
+        state = %__MODULE__.UserState{
+          irc_state: :authentication_ready,
+          requested_handle: handle,
+          requested_password: password
+        }}} ->
+        # TODO: error cases
+        {:ok, real_handle} = lookup_via_gateway(handle, password)
+
+        {:continue,
+         {socket,
+          %__MODULE__.UserState{
+            state
+            | irc_state: :connected,
+              connected?: true,
+              requested_handle: real_handle,
+              requested_password: nil,
+              ping_received?: false,
+              ping_timer: Process.send_after(self(), :ping, @ping_interval)
+          }}, @ping_interval + @ping_timeout}
+
+      {:cont,
+       {socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}}} ->
+        if not is_nil(ping_timer), do: Process.cancel_timer(ping_timer)
+
+        {:continue,
+         {socket,
+          %__MODULE__.UserState{
+            state
+            | ping_received?: false,
+              ping_timer: Process.send_after(self(), :ping, @ping_interval)
+          }}, @ping_interval + @ping_timeout}
+
+      {:cont, socket_state} ->
+        {:continue, socket_state, socket.read_timeout}
+    end
+  end
 
   # ===========================================================================
   # Termination handling
   # ===========================================================================
   @impl ThousandIsland.Handler
+  def handle_timeout(socket, state = %__MODULE__.UserState{irc_state: irc_state}) do
+    case irc_state do
+      :connected -> {socket, state} |> quit("Ping timeout")
+      :performing_authentication -> {socket, state} |> quit("Authentication timeout")
+    end
+  end
+
+  @impl ThousandIsland.Handler
   def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
     Sencha.UserSupervisor.terminate_child(user_process)
   end
 
+  # ===========================================================================
+  # Private calls
+  # ===========================================================================
   defp quit(
          {socket, state = %UserState{user_process: user_process, ping_timer: ping_timer}},
          reason
@@ -173,7 +231,10 @@ defmodule Sencha.Handler do
 
     # Notify the client of the connection termination
     socket
-    |> ThousandIsland.Socket.send(%Message{command: "ERROR", trailing: reason} |> Message.encode())
+    |> ThousandIsland.Socket.send(
+      %Message{command: "ERROR", trailing: reason}
+      |> Message.encode()
+    )
 
     # Close the client socket, the handle_close callback will wipe the socket
     # from the User Supervisor
@@ -181,5 +242,48 @@ defmodule Sencha.Handler do
 
     # NOTE: Will this cause lingering states?
     {socket, state}
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
+    __MODULE__.Pass.handle(message, socket_state)
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "NICK"}, socket_state) do
+    __MODULE__.Nick.handle(message, socket_state)
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "PONG"}, socket_state) do
+    __MODULE__.Pong.handle(message, socket_state)
+  end
+
+  defp handle_while(message, socket_state) do
+    Logger.debug("Unimplemented IRC message: #{inspect(message)}")
+    {:cont, socket_state}
+  end
+
+  defp lookup_via_gateway(username, password) do
+    # Look for nearest gateway
+    fastest_node = Sencha.Gateway.fastest_node()
+
+    # Try to get info from the nearest gateway
+    if is_nil(fastest_node) do
+      {:error, :no_gateway}
+    else
+      send(
+        {Exsemantica.Gateway, fastest_node},
+        {:user_info, self(), username, password}
+      )
+
+      receive do
+        {Exsemantica.Gateway, ^fastest_node, {:user_info, {:ok, info}}} ->
+          {:ok, info}
+
+        {Exsemantica.Gatewat, ^fastest_node, {:user_info, {:error, what}}} ->
+          {:error, what}
+      after
+        5000 ->
+          {:error, :gateway_timeout}
+      end
+    end
   end
 end
