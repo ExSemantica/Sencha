@@ -266,10 +266,7 @@ defmodule Sencha.Handler do
     if is_nil(fastest_node) do
       {:error, :no_gateway}
     else
-      send(
-        {Exsemantica.Gateway, fastest_node},
-        {:user_info, self(), username, password}
-      )
+      Sencha.Gateway.user_info(fastest_node, self(), username, password)
 
       receive do
         {Exsemantica.Gateway, ^fastest_node, {:user_info, {:ok, info}}} ->
