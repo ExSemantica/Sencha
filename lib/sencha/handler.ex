@@ -151,7 +151,7 @@ defmodule Sencha.Handler do
                   Sencha.ApplicationInfo.get_last_refreshed()
                   |> Calendar.strftime("%a, %-d %b %Y %X %Z")
 
-                user_status_pid |> __MODULE__.User.set_modes(["+w"])
+                user_status_pid |> Sencha.User.set_modes(["+w"])
 
                 version = Sencha.ApplicationInfo.get_version()
 
