@@ -360,7 +360,7 @@ defmodule Sencha.Handler do
   end
 
   defp handle_while(message = %Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
-    socket_state |> quit("Client quit: " <> reason)
+    {:halt, socket_state |> quit("Client quit: " <> reason)}
   end
 
 
