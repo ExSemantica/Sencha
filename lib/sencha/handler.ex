@@ -199,7 +199,7 @@ defmodule Sencha.Handler do
                      requested_handle: real_handle,
                      requested_password: nil,
                      ping_received?: false,
-                     ping_timer: send(self(), :ping),
+                     ping_timer: Process.send_after(self(), :ping, @ping_interval),
                      user_process: user_status_pid
                  }, @ping_interval + @ping_timeout}
 
