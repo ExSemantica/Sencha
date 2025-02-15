@@ -351,7 +351,7 @@ defmodule Sencha.Handler do
   # Private calls
   # ===========================================================================
   defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
-    __MODULE__.Pass.handle(message, socket_state)
+    __MODULE__.Pass.handle(IO.inspect message, socket_state)
   end
 
   defp handle_while(message = %Sencha.Message{command: "NICK"}, socket_state) do
