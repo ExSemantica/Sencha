@@ -61,7 +61,7 @@ defmodule Sencha.Channel do
       # Send the channel topic and usernames to whoever just joined
       user_socket
       |> __MODULE__.Helpers.send_topic(channel, user_state, topic, created)
-      |> __MODULE__.Helpers.send_names(channel, user_state, state.names)
+      |> __MODULE__.Helpers.send_names(channel, user_state, state.users)
 
       # Send channel join acknowledgement to the user's state agent
       Sencha.User.join(user_process, self())
