@@ -206,7 +206,8 @@ defmodule Sencha.Handler do
                      requested_password: nil,
                      ping_received?: false,
                      ping_timer: Process.send_after(self(), :ping, @ping_interval),
-                     user_process: user_status_pid
+                     user_process: user_status_pid,
+                     vhost: "user/#{real_handle}"
                  }, @ping_interval + @ping_timeout}
 
               {:error, {:already_started, _}} ->
