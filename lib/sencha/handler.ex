@@ -5,8 +5,6 @@ defmodule Sencha.Handler do
   Users can log in with a nickname and password. There is no need for the USER
   command to be sent.
   """
-  alias Sencha.ApplicationInfo
-  alias Sencha.Message
   require Logger
   use ThousandIsland.Handler
 
@@ -19,8 +17,6 @@ defmodule Sencha.Handler do
 
   # Ping timeout in milliseconds
   @ping_timeout 5_000
-
-  @regex_ctcp_action ~r/\x01ACTION (?<action>.+)\x01/
 
   defmodule UserState do
     defstruct requested_handle: nil,
@@ -288,13 +284,10 @@ defmodule Sencha.Handler do
     {socket, state} |> quit("Server has shut down")
   end
 
-  # ===========================================================================
-  # Private calls
-  # ===========================================================================
-  defp quit(
-         {socket, state = %UserState{user_process: user_process, ping_timer: ping_timer}},
-         reason
-       ) do
+  def quit(
+        {socket, state = %UserState{user_process: user_process, ping_timer: ping_timer}},
+        reason
+      ) do
     # This is complicated so I will explain how this all works
     if Process.alive?(user_process) do
       Logger.debug("#{user_process |> Sencha.User.get_handle()} disconnects (#{reason})")
@@ -322,8 +315,12 @@ defmodule Sencha.Handler do
       for receiver <- receivers do
         receiver
         |> ThousandIsland.Socket.send(
-          %Message{prefix: state |> UserState.get_host_mask(), command: "QUIT", trailing: reason}
-          |> Message.encode()
+          %Sencha.Message{
+            prefix: state |> UserState.get_host_mask(),
+            command: "QUIT",
+            trailing: reason
+          }
+          |> Sencha.Message.encode()
         )
       end
 
@@ -336,8 +333,8 @@ defmodule Sencha.Handler do
     # Notify the client of the connection termination
     socket
     |> ThousandIsland.Socket.send(
-      %Message{command: "ERROR", trailing: reason}
-      |> Message.encode()
+      %Sencha.Message{command: "ERROR", trailing: reason}
+      |> Sencha.Message.encode()
     )
 
     # Close the client socket, the handle_close callback will wipe the socket
@@ -349,6 +346,9 @@ defmodule Sencha.Handler do
     {socket, state}
   end
 
+  # ===========================================================================
+  # Private calls
+  # ===========================================================================
   defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
     __MODULE__.Pass.handle(message, socket_state)
   end
@@ -365,10 +365,21 @@ defmodule Sencha.Handler do
     __MODULE__.Ping.handle(message, socket_state)
   end
 
+  defp handle_while(message = %Sencha.Message{command: "PRIVMSG"}, socket_state) do
+    __MODULE__.Privmsg.handle(message, socket_state)
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "JOIN"}, socket_state) do
+    __MODULE__.Join.handle(message, socket_state)
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "PART"}, socket_state) do
+    __MODULE__.Part.handle(message, socket_state)
+  end
+
   defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
     {:halt, socket_state |> quit("Client quit: " <> reason)}
   end
-
 
   defp handle_while(message, socket_state) do
     Logger.debug("Unimplemented IRC message: #{inspect(message)}")
