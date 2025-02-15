@@ -51,4 +51,5 @@ defmodule Sencha.Handler.Pass do
           requested_password: password
       }}}
   end
+
 end

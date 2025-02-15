@@ -51,8 +51,7 @@ defmodule Sencha.Message do
   """
   def decode(message) do
     message
-    |> String.split("\n")
-    |> Enum.map(&String.replace_suffix(&1, "\r", ""))
+    |> String.split("\r\n")
     |> Enum.map(&String.trim/1)
     |> Enum.reject(&(&1 == ""))
     |> Enum.map(&decode_one/1)
