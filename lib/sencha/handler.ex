@@ -283,6 +283,11 @@ defmodule Sencha.Handler do
     end
   end
 
+  @impl ThousandIsland.Handler
+  def handle_shutdown(socket, state) do
+    {socket, state} |> quit("Server has shut down")
+  end
+
   # ===========================================================================
   # Private calls
   # ===========================================================================
@@ -359,7 +364,7 @@ defmodule Sencha.Handler do
     __MODULE__.Ping.handle(message, socket_state)
   end
 
-  defp handle_while(message = %Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
+  defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
     {:halt, socket_state |> quit("Client quit: " <> reason)}
   end
 
