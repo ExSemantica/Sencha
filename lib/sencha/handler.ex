@@ -275,7 +275,7 @@ defmodule Sencha.Handler do
 
   @impl ThousandIsland.Handler
   def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
-    if Process.alive?(user_process) do
+    if not is_nil(user_process) and Process.alive?(user_process) do
       Sencha.UserSupervisor.terminate_child(user_process)
     end
   end
@@ -290,7 +290,7 @@ defmodule Sencha.Handler do
         reason
       ) do
     # This is complicated so I will explain how this all works
-    if Process.alive?(user_process) do
+    if not is_nil(user_process) and Process.alive?(user_process) do
       Logger.debug("#{user_process |> Sencha.User.get_handle()} disconnects (#{reason})")
 
       receivers =
@@ -350,8 +350,12 @@ defmodule Sencha.Handler do
   # ===========================================================================
   # Private calls
   # ===========================================================================
+  defp handle_while(message = %Sencha.Message{command: "CAP"}, socket_state) do
+    __MODULE__.Cap.handle(message, socket_state)
+  end
+
   defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
-    __MODULE__.Pass.handle(IO.inspect(message), socket_state)
+    __MODULE__.Pass.handle(message, socket_state)
   end
 
   defp handle_while(message = %Sencha.Message{command: "NICK"}, socket_state) do

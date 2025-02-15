@@ -72,8 +72,8 @@ defmodule Sencha.Channel do
 
   @impl true
   def handle_cast(
-        {:part,
-         {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}}, reason},
+        {:part, {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}},
+         reason},
         state = %{users: users, channel: channel}
       ) do
     if {user_socket, user_process} in users do
@@ -105,9 +105,8 @@ defmodule Sencha.Channel do
 
   @impl true
   def handle_cast(
-        {:talk,
-         {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}},
-          message},
+        {:talk, {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}},
+         message},
         state = %{users: users, channel: channel}
       ) do
     if {user_socket, user_process} in users do
