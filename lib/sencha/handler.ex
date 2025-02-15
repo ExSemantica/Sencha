@@ -342,8 +342,8 @@ defmodule Sencha.Handler do
 
     # Close the client socket, the handle_close callback will wipe the socket
     # from the User Supervisor
-    socket |> ThousandIsland.Socket.close()
     socket |> ThousandIsland.Socket.shutdown(:read_write)
+    socket |> ThousandIsland.Socket.close()
 
     # NOTE: Will this cause lingering states?
     {socket, state}
