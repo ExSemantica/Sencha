@@ -25,7 +25,7 @@ defmodule Sencha.Handler.Cap do
     {:cont, {socket, state}}
   end
 
-  def handle(%Sencha.Message{command: "CAP", params ["END"]}, {socket, state = %Sencha.Handler.UserState{connected?: false}}) do
+  def handle(%Sencha.Message{command: "CAP", params: ["END"]}, {socket, state = %Sencha.Handler.UserState{connected?: false}}) do
     {:cont, {socket, state}}
   end
 
