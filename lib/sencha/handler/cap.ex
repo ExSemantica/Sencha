@@ -4,20 +4,19 @@ defmodule Sencha.Handler.Cap do
   """
 
   def handle(
-        %Sencha.Message{command: "CAP", params: negotiate},
+        %Sencha.Message{command: "CAP", params: ["LS", "302"]},
         {socket,
          state = %Sencha.Handler.UserState{
            connected?: false
          }}
-      )
-      when hd(negotiate) == "LS" do
+      ) do
     socket
     |> ThousandIsland.Socket.send(
       %Sencha.Message{
         prefix: Sencha.ApplicationInfo.get_chat_hostname(),
         command: "CAP",
         params: ["*", "LS"],
-        trailing: ""
+        trailing: " "
       }
       |> Sencha.Message.encode()
     )
