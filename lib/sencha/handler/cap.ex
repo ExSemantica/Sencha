@@ -16,7 +16,7 @@ defmodule Sencha.Handler.Cap do
         prefix: Sencha.ApplicationInfo.get_chat_hostname(),
         command: "CAP",
         params: ["*", "LS"],
-        trailing: " "
+        trailing: ""
       }
       |> Sencha.Message.encode()
     )
