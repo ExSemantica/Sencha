@@ -4,7 +4,7 @@ defmodule Sencha.Handler.Pass do
   """
   # Some noncompliant clients will send the password in the trailing parameters
   def handle(
-        %Sencha.Message{command: "PASS", trailing: password},
+        %Sencha.Message{command: "PASS", params: [], trailing: password},
         {socket,
          state = %Sencha.Handler.UserState{
            irc_state: :performing_authentication,
@@ -15,7 +15,7 @@ defmodule Sencha.Handler.Pass do
   end
 
   def handle(
-        %Sencha.Message{command: "PASS", trailing: password},
+        %Sencha.Message{command: "PASS", params: [], trailing: password},
         {socket, state = %Sencha.Handler.UserState{irc_state: :performing_authentication}}
       ) do
     {:cont,
