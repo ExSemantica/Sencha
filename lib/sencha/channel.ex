@@ -29,7 +29,7 @@ defmodule Sencha.Channel do
       {:ok, info} ->
         {:ok,
          %{
-           channel: info.aggregate |> String.downcase(),
+           channel: "#" <> (info.aggregate |> String.downcase()),
            topic: info.description,
            users: [],
            created: info.inserted_at |> DateTime.to_unix()
