@@ -278,6 +278,13 @@ defmodule Sencha.Handler do
     if not is_nil(user_process) and Process.alive?(user_process) do
       Sencha.UserSupervisor.terminate_child(user_process)
     end
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_close(_socket, _state) do
+    # Hush socket warning
+    :ok
   end
 
   @impl ThousandIsland.Handler
