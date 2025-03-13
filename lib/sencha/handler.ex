@@ -23,6 +23,7 @@ defmodule Sencha.Handler do
               requested_password: nil,
               irc_state: :performing_authentication,
               ping_timer: nil,
+              timeout_timer: nil,
               authentication_timer: nil,
               user_process: nil,
               ident: "~Sencha",
@@ -64,7 +65,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(_socket, _state) do
-    {:continue, %UserState{}, @timeout_auth}
+    {:continue, %UserState{}, :infinity}
   end
 
   # ===========================================================================
@@ -121,7 +122,20 @@ defmodule Sencha.Handler do
       |> Sencha.Message.encode()
     )
 
-    {:noreply, {socket, state}, socket.read_timeout}
+    {:noreply,
+     {socket,
+      %UserState{state | timeout_timer: Process.send_after(self(), :timeout, @ping_timeout)}},
+     socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_info(:timeout, socket_state = {socket, state}) do
+    case state.irc_state do
+      :connected -> socket_state |> quit("Ping timeout")
+      :performing_authentication -> socket_state |> quit("Authentication timeout")
+    end
+
+    {:noreply, socket_state, socket.read_timeout}
   end
 
   # ===========================================================================
@@ -152,6 +166,8 @@ defmodule Sencha.Handler do
             case user_status do
               {:ok, user_status_pid} ->
                 Logger.debug("#{real_handle} connects")
+
+                if not is_nil(state.timeout_timer), do: Process.cancel_timer(state.timeout_timer)
 
                 refreshed =
                   Sencha.ApplicationInfo.get_last_refreshed()
@@ -206,9 +222,10 @@ defmodule Sencha.Handler do
                      requested_password: nil,
                      ping_received?: false,
                      ping_timer: Process.send_after(self(), :ping, @ping_interval),
+                     timeout_timer: nil,
                      user_process: user_status_pid,
                      vhost: "user/#{real_handle}"
-                 }, @ping_interval + @ping_timeout}
+                 }, socket.read_timeout}
 
               {:error, {:already_started, _}} ->
                 socket
@@ -247,14 +264,21 @@ defmodule Sencha.Handler do
             {:close, state}
         end
 
-      {_socket, state = %__MODULE__.UserState{ping_received?: true, ping_timer: ping_timer}} ->
+      {_socket,
+       state = %__MODULE__.UserState{
+         ping_received?: true,
+         ping_timer: ping_timer,
+         timeout_timer: timeout_timer
+       }} ->
         if not is_nil(ping_timer), do: Process.cancel_timer(ping_timer)
+        if not is_nil(timeout_timer), do: Process.cancel_timer(timeout_timer)
 
         {:continue,
          %__MODULE__.UserState{
            state
            | ping_received?: false,
-             ping_timer: Process.send_after(self(), :ping, @ping_interval)
+             ping_timer: Process.send_after(self(), :ping, @ping_interval),
+             timeout_timer: nil
          }, @ping_interval + @ping_timeout}
 
       {socket, state} ->
@@ -266,30 +290,24 @@ defmodule Sencha.Handler do
   # Termination handling
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_timeout(socket, state = %__MODULE__.UserState{irc_state: irc_state}) do
-    case irc_state do
-      :connected -> {socket, state} |> quit("Ping timeout")
-      :performing_authentication -> {socket, state} |> quit("Authentication timeout")
-    end
-  end
-
-  @impl ThousandIsland.Handler
   def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
     if not is_nil(user_process) and Process.alive?(user_process) do
       Sencha.UserSupervisor.terminate_child(user_process)
     end
+
     :ok
   end
 
   @impl ThousandIsland.Handler
   def handle_close(_socket, _state) do
     # Hush socket warning
+
     :ok
   end
 
   @impl ThousandIsland.Handler
   def handle_shutdown(socket, state) do
-    {socket, state} |> quit("Server has shut down")
+    {socket, state} |> quit("Server is shutting down")
   end
 
   def quit(
@@ -347,7 +365,6 @@ defmodule Sencha.Handler do
 
     # Close the client socket, the handle_close callback will wipe the socket
     # from the User Supervisor
-    socket |> ThousandIsland.Socket.shutdown(:read_write)
     socket |> ThousandIsland.Socket.close()
 
     # NOTE: Will this cause lingering states?
