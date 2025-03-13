@@ -289,6 +289,13 @@ defmodule Sencha.Handler do
   # Termination handling
   # ===========================================================================
   @impl ThousandIsland.Handler
+  def handle_timeout(socket, state) do
+    {socket, state} |> quit("Authentication timeout")
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
   def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
     if not is_nil(user_process) and Process.alive?(user_process) do
       Sencha.UserSupervisor.terminate_child(user_process)
