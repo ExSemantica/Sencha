@@ -65,7 +65,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(_socket, _state) do
-    {:continue, %UserState{timeout_timer: Process.send_after(self(), @timeout_auth, :timeout)},
+    {:continue, %UserState{timeout_timer: Process.send_after(self(), :timeout, @timeout_auth)},
      :infinity}
   end
 
