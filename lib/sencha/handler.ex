@@ -65,7 +65,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(_socket, _state) do
-    {:continue, %UserState{timeout_timer: Process.send_after(self(), :timeout, @timeout_auth)}}
+    {:continue, %UserState{}, {:persistent, @timeout_auth}}
   end
 
   # ===========================================================================
@@ -132,7 +132,6 @@ defmodule Sencha.Handler do
   def handle_info(:timeout, socket_state = {socket, state}) do
     case state.irc_state do
       :connected -> socket_state |> quit("Ping timeout")
-      :performing_authentication -> socket_state |> quit("Authentication timeout")
     end
 
     {:noreply, socket_state, socket.read_timeout}
@@ -225,7 +224,7 @@ defmodule Sencha.Handler do
                      timeout_timer: nil,
                      user_process: user_status_pid,
                      vhost: "user/#{real_handle}"
-                 }, socket.read_timeout}
+                 }, {:persistent, :infinity}}
 
               {:error, {:already_started, _}} ->
                 socket
@@ -301,6 +300,13 @@ defmodule Sencha.Handler do
   @impl ThousandIsland.Handler
   def handle_close(_socket, _state) do
     # Hush socket warning
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_error(_reason, socket, state) do
+    {socket, state} |> quit("I/O error")
 
     :ok
   end
