@@ -278,7 +278,7 @@ defmodule Sencha.Handler do
            | ping_received?: false,
              ping_timer: Process.send_after(self(), :ping, @ping_interval),
              timeout_timer: nil
-         }, @ping_interval + @ping_timeout}
+         }, socket.read_timeout}
 
       {socket, state} ->
         {:continue, state, socket.read_timeout}
