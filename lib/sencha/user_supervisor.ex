@@ -2,6 +2,7 @@ defmodule Sencha.UserSupervisor do
   @moduledoc """
   Allows for dynamic, lazy starting of users.
   """
+  require Logger
   use DynamicSupervisor
 
   # Maximum users who can join
@@ -39,6 +40,7 @@ defmodule Sencha.UserSupervisor do
   TODO: There should be a function to call for wallops instead!
   """
   def broadcast_wallops(message) do
+    Logger.info("Wallops: " <> message)
     children = DynamicSupervisor.which_children(__MODULE__)
 
     for {_, pid, _, [Sencha.User]} <- children do

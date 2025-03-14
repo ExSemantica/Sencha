@@ -331,6 +331,8 @@ defmodule Sencha.Handler do
   @impl ThousandIsland.Handler
   def handle_shutdown(socket, state) do
     {socket, state} |> quit("Server is shutting down")
+
+    :ok
   end
 
   def quit(

@@ -6,7 +6,7 @@ defmodule Sencha.Administration do
   @doc """
   Convenience for `Sencha.UserSupervisor.broadcast_wallops/1`.
   """
-  def broadcast_wallops(message) do
-    Sencha.UserSupervisor.broadcast_wallops(message)
+  def announce(message) do
+    Sencha.UserSupervisor.broadcast_wallops("[Announcement] " <> message)
   end
 end
