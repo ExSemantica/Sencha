@@ -129,10 +129,10 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(:ping_timeout, socket_state = {socket, _state}) do
+  def handle_info(:ping_timeout, socket_state) do
     socket_state |> quit("Ping timeout")
 
-    {:close, socket_state}
+    {:noreply, socket_state, {:persistent, :infinity}}
   end
 
   # ===========================================================================
