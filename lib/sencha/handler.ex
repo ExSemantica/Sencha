@@ -13,7 +13,7 @@ defmodule Sencha.Handler do
   @timeout_auth 10_000
 
   # Ping interval in milliseconds
-  @ping_interval 15_000
+  @ping_interval 60_000
 
   # Ping timeout in milliseconds
   @ping_timeout 5_000
