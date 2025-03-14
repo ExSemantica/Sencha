@@ -127,8 +127,7 @@ defmodule Sencha.Handler do
      {socket,
       %UserState{
         state
-        | timeout_timer: Process.send_after(self(), :ping_timeout, @ping_timeout),
-          last_ping: DateTime.utc_now(:second)
+        | timeout_timer: Process.send_after(self(), :ping_timeout, @ping_timeout)
       }}, socket.read_timeout}
   end
 
@@ -228,7 +227,8 @@ defmodule Sencha.Handler do
                      ping_timer: Process.send_after(self(), :ping, @ping_interval),
                      timeout_timer: nil,
                      user_process: user_status_pid,
-                     vhost: "user/#{real_handle}"
+                     vhost: "user/#{real_handle}",
+                     last_ping: DateTime.utc_now(:second)
                  }, {:persistent, :infinity}}
 
               {:error, {:already_started, _}} ->
@@ -283,7 +283,8 @@ defmodule Sencha.Handler do
            state
            | ping_received?: false,
              ping_timer: Process.send_after(self(), :ping, @ping_interval),
-             timeout_timer: nil
+             timeout_timer: nil,
+             last_ping: DateTime.utc_now(:second)
          }, {:persistent, :infinity}}
 
       {_socket, state} when state.connected? ->
