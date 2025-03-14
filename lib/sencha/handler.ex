@@ -10,7 +10,7 @@ defmodule Sencha.Handler do
 
   # Wait this long in milliseconds for NICK and PASS before disconnecting
   # Note that USER isn't implemented here
-  @timeout_auth 10_000
+  @timeout_auth 5_000
 
   # Ping interval in milliseconds
   @ping_interval 15_000
