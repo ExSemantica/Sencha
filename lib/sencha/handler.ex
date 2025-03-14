@@ -430,10 +430,14 @@ defmodule Sencha.Handler do
     __MODULE__.Part.handle(message, socket_state)
   end
 
-  defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
-    {:halt, socket_state |> quit("Client quit: " <> reason)}
+  defp handle_while(%Sencha.Message{command: "QUIT", trailing: nil}, socket_state) do
+    {:halt, socket_state |> quit("Client Quit")}
   end
 
+  defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
+    {:halt, socket_state |> quit("Client Quit: " <> reason)}
+  end
+  
   defp handle_while(message, socket_state) do
     Logger.debug("Unimplemented IRC message: #{inspect(message)}")
     {:cont, socket_state}
