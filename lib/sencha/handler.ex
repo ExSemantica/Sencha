@@ -10,7 +10,7 @@ defmodule Sencha.Handler do
 
   # Wait this long in milliseconds for NICK and PASS before disconnecting
   # Note that USER isn't implemented here
-  @timeout_auth 5_000
+  @timeout_auth 10_000
 
   # Ping interval in milliseconds
   @ping_interval 15_000
@@ -29,7 +29,8 @@ defmodule Sencha.Handler do
               ident: "~Sencha",
               vhost: nil,
               connected?: false,
-              ping_received?: false
+              ping_received?: false,
+              last_ping: nil
 
     def get_host_mask(%__MODULE__{requested_handle: handle, ident: ident, vhost: vhost}) do
       handle <> "!" <> ident <> "@" <> vhost
@@ -124,15 +125,21 @@ defmodule Sencha.Handler do
 
     {:noreply,
      {socket,
-      %UserState{state | timeout_timer: Process.send_after(self(), :ping_timeout, @ping_timeout)}},
-     socket.read_timeout}
+      %UserState{
+        state
+        | timeout_timer: Process.send_after(self(), :ping_timeout, @ping_timeout),
+          last_ping: DateTime.utc_now(:second)
+      }}, socket.read_timeout}
   end
 
   @impl GenServer
-  def handle_info(:ping_timeout, socket_state) do
-    socket_state |> quit("Ping timeout")
+  def handle_info(:ping_timeout, socket_state = {socket, state}) do
+    socket_state
+    |> quit(
+      "Ping timeout (#{DateTime.utc_now(:second) |> DateTime.diff(state.last_ping, :second)} seconds)"
+    )
 
-    {:noreply, socket_state, {:persistent, :infinity}}
+    {:noreply, socket_state, socket.read_timeout}
   end
 
   # ===========================================================================
