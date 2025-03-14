@@ -222,7 +222,7 @@ defmodule Sencha.Handler do
                      timeout_timer: nil,
                      user_process: user_status_pid,
                      vhost: "user/#{real_handle}"
-                 }, :infinity}
+                 }, {:persistent, :infinity}}
 
               {:error, {:already_started, _}} ->
                 socket
@@ -278,6 +278,9 @@ defmodule Sencha.Handler do
              ping_timer: Process.send_after(self(), :ping, @ping_interval),
              timeout_timer: nil
          }, socket.read_timeout}
+
+      {_socket, state} when state.connected? ->
+        {:continue, state, {:persistent, :infinity}}
 
       {_socket, state} ->
         {:continue, state, socket.read_timeout}
