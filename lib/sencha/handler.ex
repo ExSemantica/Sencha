@@ -129,7 +129,7 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(:timeout, socket_state = {socket, state}) do
+  def handle_info(:timeout, socket_state = {socket, _state}) do
     socket_state |> quit("Ping timeout")
 
     {:noreply, socket_state, socket.read_timeout}
@@ -222,7 +222,7 @@ defmodule Sencha.Handler do
                      timeout_timer: nil,
                      user_process: user_status_pid,
                      vhost: "user/#{real_handle}"
-                 }, socket.read_timeout}
+                 }, :infinity}
 
               {:error, {:already_started, _}} ->
                 socket
@@ -263,6 +263,7 @@ defmodule Sencha.Handler do
 
       {_socket,
        state = %__MODULE__.UserState{
+         connected?: true,
          ping_received?: true,
          ping_timer: ping_timer,
          timeout_timer: timeout_timer
@@ -277,9 +278,6 @@ defmodule Sencha.Handler do
              ping_timer: Process.send_after(self(), :ping, @ping_interval),
              timeout_timer: nil
          }, socket.read_timeout}
-
-      {_socket, state} when state.connected? ->
-        {:continue, state, {:persistent, :infinity}}
 
       {_socket, state} ->
         {:continue, state, socket.read_timeout}
