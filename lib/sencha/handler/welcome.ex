@@ -9,9 +9,10 @@ defmodule Sencha.Handler.Welcome do
       Sencha.ApplicationInfo.get_last_refreshed()
       |> Calendar.strftime("%a, %-d %b %Y %X %Z")
 
-    user_status_pid |> Sencha.User.set_modes(["+w"])
+    state.user_process |> Sencha.User.set_modes(["+w"])
 
     version = Sencha.ApplicationInfo.get_version()
+    host = Sencha.ApplicationInfo.get_chat_hostname()
 
     burst = [
       %Sencha.Message{
