@@ -194,7 +194,7 @@ defmodule Sencha.Handler do
   end
 
   @impl ThousandIsland.Handler
-  def handle_close(socket, state = %UserState{connected?: true, user_process: user_process}) do
+  def handle_close(socket, state = %UserState{user_process: user_process}) do
     # This is complicated so I will explain how this all works
     if not is_nil(user_process) and Process.alive?(user_process) do
       reason = Sencha.User.get_quit_reason(user_process)
@@ -236,12 +236,6 @@ defmodule Sencha.Handler do
       Sencha.UserSupervisor.terminate_child(user_process)
     end
 
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_close(_socket, _state) do
-    # Hush socket warning
     :ok
   end
 
