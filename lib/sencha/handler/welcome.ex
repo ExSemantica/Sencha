@@ -69,7 +69,7 @@ defmodule Sencha.Handler.Welcome do
             | irc_state: :connected,
               connected?: true,
               requested_handle: handle,
-              ping_received?: false,
+              ping_received?: true,
               user_process: user_pid,
               last_ping: DateTime.utc_now(:second)
           }}
