@@ -216,7 +216,7 @@ defmodule Sencha.Handler do
 
   @impl ThousandIsland.Handler
   def handle_error(_reason, socket, state) do
-    {socket, state} |> quit("I/O error")
+    {socket, state} |> quit("Server error")
 
     :ok
   end

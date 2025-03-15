@@ -8,6 +8,17 @@ defmodule Sencha.Handler.Privmsg do
 
   @max_recipients 1
 
+# Some other IRC clients do NOT comply, let's fix that...
+  def handle(
+        %Sencha.Message{command: "PRIVMSG", params: [user, one_word], trailing: nil},
+        {socket, state}
+      ) do
+    handle(
+      %Sencha.Message{command: "PRIVMSG", params: [user], trailing: one_word},
+      {socket, state}
+    )
+  end
+
   def handle(
         %Sencha.Message{command: "PRIVMSG", params: [recipients_commas], trailing: message},
         {socket,
