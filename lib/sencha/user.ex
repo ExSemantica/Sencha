@@ -12,7 +12,13 @@ defmodule Sencha.User do
 
     Agent.start_link(
       fn ->
-        %{handle: handle, socket: socket, channels: MapSet.new(), modes: MapSet.new(), quit_reason: "Client error"}
+        %{
+          handle: handle,
+          socket: socket,
+          channels: MapSet.new(),
+          modes: MapSet.new(),
+          quit_reason: "Client error"
+        }
       end,
       name: where
     )
@@ -54,7 +60,7 @@ defmodule Sencha.User do
   Gets this user's reason to be disconnected
   """
   def get_quit_reason(pid) do
-    Agent.get(pid, &(&1.quit_reason))
+    Agent.get(pid, & &1.quit_reason)
   end
 
   @doc """
@@ -65,6 +71,7 @@ defmodule Sencha.User do
       %{state | quit_reason: reason}
     end)
   end
+
   # ===========================================================================
   @doc """
   Helper for sending wallops
