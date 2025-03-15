@@ -317,6 +317,18 @@ defmodule Sencha.Handler do
     __MODULE__.Part.handle(message, socket_state)
   end
 
+  defp handle_while(message = %Sencha.Message{command: "NICK"}, socket_state) do
+    {:cont, socket_state}
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "USER"}, socket_state) do
+    {:cont, socket_state}
+  end
+
+  defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
+    {:cont, socket_state}
+  end
+
   defp handle_while(
          message = %Sencha.Message{command: "AUTHENTICATE"},
          socket_state = {_socket, state = %UserState{capabilities: capabilities}}
