@@ -70,8 +70,7 @@ defmodule Sencha.Handler.Welcome do
               connected?: true,
               requested_handle: handle,
               ping_received?: true,
-              user_process: user_pid,
-              last_ping: DateTime.utc_now(:second)
+              user_process: user_pid
           }}
          |> send_burst()}
 

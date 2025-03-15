@@ -45,11 +45,6 @@ defmodule Sencha.Handler do
   # Public calls
   # ===========================================================================
   @doc """
-  Gets the ping interval in milliseconds.
-  """
-  def get_ping_interval, do: @ping_interval
-
-  @doc """
   Terminates the specified PID's connection, usually by an administrator.
   """
   def kill_client(pid, source, reason) do
@@ -199,41 +194,11 @@ defmodule Sencha.Handler do
   end
 
   @impl ThousandIsland.Handler
-  def handle_close(_socket, %UserState{connected?: true, user_process: user_process}) do
-    if not is_nil(user_process) and Process.alive?(user_process) do
-      Sencha.UserSupervisor.terminate_child(user_process)
-    end
-
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_close(_socket, _state) do
-    # Hush socket warning
-
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, state) do
-    {socket, state} |> quit("Server error")
-
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_shutdown(socket, state) do
-    {socket, state} |> quit("Server is shutting down")
-
-    :ok
-  end
-
-  def quit(
-        {socket, state = %UserState{user_process: user_process, ping_timer: ping_timer}},
-        reason
-      ) do
+  def handle_close(socket, state = %UserState{connected?: true, user_process: user_process}) do
     # This is complicated so I will explain how this all works
     if not is_nil(user_process) and Process.alive?(user_process) do
+      reason = Sencha.User.get_quit_reason(user_process)
+
       Logger.debug("#{user_process |> Sencha.User.get_handle()} disconnects (#{reason})")
 
       receivers =
@@ -268,10 +233,35 @@ defmodule Sencha.Handler do
         )
       end
 
-      :ok = Sencha.UserSupervisor.terminate_child(user_process)
+      Sencha.UserSupervisor.terminate_child(user_process)
+    end
 
-      # Ping timer should be removed when the connection is removed
-      if not is_nil(ping_timer), do: Process.cancel_timer(ping_timer)
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_close(_socket, _state) do
+    # Hush socket warning
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_error(_reason, socket, state) do
+    {socket, state} |> quit("Server error")
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_shutdown(socket, state) do
+    {socket, state} |> quit("Server is shutting down")
+
+    :ok
+  end
+
+  def quit({socket, state = %UserState{user_process: user_process}}, reason) do
+    if not is_nil(user_process) and Process.alive?(user_process) do
+      Sencha.User.set_quit_reason(reason)
     end
 
     # Notify the client of the connection termination
