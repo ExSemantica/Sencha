@@ -4,6 +4,14 @@ defmodule Sencha.Handler.Cap do
   """
   @supported_capabilities MapSet.new(["sasl"])
 
+  # Some other IRC clients do NOT comply with the CAP IRCv3 doc, let's fix that...
+  def handle(%Sencha.Message{command: "CAP", params: ["REQ" | noncompliant]}, {socket, state}) do
+    handle(
+      %Sencha.Message{command: "CAP", params: ["REQ"], trailing: noncompliant |> Enum.join(" ")},
+      {socket, state}
+    )
+  end
+
   def handle(
         %Sencha.Message{command: "CAP", params: ["LS" | _]},
         {socket, state = %Sencha.Handler.UserState{requested_handle: handle}}
