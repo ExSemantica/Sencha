@@ -257,7 +257,7 @@ defmodule Sencha.Handler do
   end
 
   def check_for_others({socket, state}, handle) do
-    user_status = Sencha.UserSupervisor.start_child(handle, self())
+    user_status = Sencha.UserSupervisor.start_child(handle, socket)
 
     case user_status do
       {:ok, user_pid} ->
