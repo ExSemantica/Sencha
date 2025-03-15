@@ -194,6 +194,9 @@ defmodule Sencha.Handler do
   end
 
   @impl ThousandIsland.Handler
+  def handle_close(_socket, %UserState{user_process: nil}), do: :ok
+
+  @impl ThousandIsland.Handler
   def handle_close(socket, state = %UserState{user_process: user_process}) do
     # This is complicated so I will explain how this all works
     if Process.alive?(user_process) do
@@ -251,6 +254,43 @@ defmodule Sencha.Handler do
     {socket, state} |> quit("Server is shutting down")
 
     :ok
+  end
+
+  def check_for_others({socket, state}, handle) do
+    user_status = Sencha.UserSupervisor.start_child(handle, self())
+
+    case user_status do
+      {:ok, user_pid} ->
+        Logger.debug("#{handle} connects")
+
+        {:cont,
+         {socket,
+          %UserState{
+            state
+            | irc_state: :connected,
+              connected?: true,
+              requested_handle: handle,
+              ping_received?: true,
+              user_process: user_pid
+          }}
+         |> Sencha.Handler.Welcome.send_burst()}
+
+      {:error, {:already_started, _}} ->
+        socket
+        |> ThousandIsland.Socket.send(
+          %Sencha.Message{
+            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+            command: "433",
+            params: [handle],
+            trailing: "Account already in use"
+          }
+          |> Sencha.Message.encode()
+        )
+
+        {socket, state} |> Sencha.Handler.quit("Account already in use")
+
+        {:halt, {socket, state}}
+    end
   end
 
   def quit({socket, state = %UserState{user_process: user_process}}, reason) do

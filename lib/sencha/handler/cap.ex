@@ -103,7 +103,7 @@ defmodule Sencha.Handler.Cap do
         {socket, state = %Sencha.Handler.UserState{capabilities_ok?: true}}
       ) do
     if state.irc_state == :wait_for_cap_end do
-      {socket, state} |> Sencha.Handler.Welcome.check_for_others(state.requested_handle)
+      {socket, state} |> Sencha.Handler.check_for_others(state.requested_handle)
     else
       {:cont, {socket, state}}
     end
