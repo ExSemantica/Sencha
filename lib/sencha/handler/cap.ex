@@ -93,9 +93,9 @@ defmodule Sencha.Handler.Cap do
       ) do
     if state.irc_state == :wait_for_cap_end do
       {socket, state} |> Sencha.Handler.Welcome.check_for_others(state.requested_handle)
+    else
+      {:cont, {socket, state}}
     end
-
-    {:cont, {socket, state}}
   end
 
   def handle(
