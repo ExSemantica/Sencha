@@ -11,14 +11,14 @@ defmodule Sencha.Handler.Cap do
     # The official client only needs to support legacy CAP LS calls
     # Treat the IRC connections the same way
     nick = handle || "*"
-    
+
     socket
     |> ThousandIsland.Socket.send(
       %Sencha.Message{
         prefix: Sencha.ApplicationInfo.get_chat_hostname(),
         command: "CAP",
         params: [nick, "LS"],
-        trailing: "sasl"
+        trailing: @supported_capabilities |> Enum.join(" ")
       }
       |> Sencha.Message.encode()
     )
@@ -81,14 +81,20 @@ defmodule Sencha.Handler.Cap do
         |> Sencha.Message.encode()
       )
 
-      {:cont, {socket, %Sencha.Handler.UserState{state | capabilities: supported}}}
+      {:cont,
+       {socket,
+        %Sencha.Handler.UserState{state | capabilities: supported, capabilities_ok?: true}}}
     end
   end
 
   def handle(
         %Sencha.Message{command: "CAP", params: ["END"]},
-        {socket, state}
+        {socket, state = %Sencha.Handler.UserState{capabilities_ok?: true}}
       ) do
+    if state.irc_state == :wait_for_cap_end do
+      {socket, state} |> Sencha.Handler.Welcome.check_for_others(state.requested_handle)
+    end
+
     {:cont, {socket, state}}
   end
 

@@ -158,7 +158,36 @@ defmodule Sencha.Handler.Authenticate do
 
     case user_info do
       {:ok, %{username: handle}} ->
-        {socket, state} |> check_for_others(handle)
+        Logger.debug("#{handle} logs in")
+        host = Sencha.ApplicationInfo.get_chat_hostname()
+
+        new_state = %Sencha.Handler.UserState{
+          state
+          | requested_handle: handle,
+            vhost: "user/#{handle}",
+            irc_state: :wait_for_cap_end
+        }
+
+        burst = [
+          %Sencha.Message{
+            prefix: host,
+            command: "900",
+            params: [handle, new_state |> Sencha.Handler.UserState.get_host_mask(), handle],
+            trailing: "You are now logged in as #{handle}"
+          },
+          %Sencha.Message{
+            prefix: host,
+            command: "903",
+            params: [handle],
+            trailing: "SASL authentication successful"
+          }
+        ]
+
+        for b <- burst do
+          socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
+        end
+
+        {:cont, {socket, new_state}}
 
       {:error, error} ->
         nick = requested_handle || "*"
@@ -202,49 +231,6 @@ defmodule Sencha.Handler.Authenticate do
         5000 ->
           {:error, :gateway_timeout}
       end
-    end
-  end
-
-  defp check_for_others({socket, state}, handle) do
-    user_status = Sencha.UserSupervisor.start_child(handle, self())
-
-    case user_status do
-      {:ok, user_pid} ->
-        Logger.debug("#{handle} connects")
-
-        {:cont,
-         {socket,
-          %Sencha.Handler.UserState{
-            state
-            | irc_state: :connected,
-              connected?: true,
-              requested_handle: handle,
-              ping_received?: false,
-              ping_timer: Process.send_after(self(), :ping, Sencha.Handler.get_ping_interval()),
-              timeout_timer: nil,
-              user_process: user_pid,
-              vhost: "user/#{handle}",
-              last_ping: DateTime.utc_now(:second)
-          }}
-         |> Sencha.Handler.Welcome.send_burst()}
-
-      {:error, {:already_started, _}} ->
-        Logger.debug("#{handle} is not unique")
-
-        socket
-        |> ThousandIsland.Socket.send(
-          %Sencha.Message{
-            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-            command: "902",
-            params: [handle],
-            trailing: "You must use a nick assigned to you"
-          }
-          |> Sencha.Message.encode()
-        )
-
-        {socket, state} |> Sencha.Handler.quit("You must use a nick assigned to you")
-
-        {:halt, {socket, state}}
     end
   end
 end

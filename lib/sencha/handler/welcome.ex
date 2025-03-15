@@ -1,9 +1,12 @@
 defmodule Sencha.Handler.Welcome do
   @moduledoc """
-  Sends a welcome burst to a client
+  Handles client connections after SASL and CAP succeed
   """
-  def send_burst({socket, state}) do
+  require Logger
+
+  defp send_burst({socket, state}) do
     real_handle = state.requested_handle
+    host = Sencha.ApplicationInfo.get_chat_hostname()
 
     refreshed =
       Sencha.ApplicationInfo.get_last_refreshed()
@@ -12,21 +15,8 @@ defmodule Sencha.Handler.Welcome do
     state.user_process |> Sencha.User.set_modes(["+w"])
 
     version = Sencha.ApplicationInfo.get_version()
-    host = Sencha.ApplicationInfo.get_chat_hostname()
 
     burst = [
-      %Sencha.Message{
-        prefix: host,
-        command: "900",
-        params: [real_handle],
-        trailing: "You are now logged in as #{real_handle}"
-      },
-      %Sencha.Message{
-        prefix: host,
-        command: "903",
-        params: [real_handle],
-        trailing: "SASL authentication successful"
-      },
       %Sencha.Message{
         prefix: host,
         command: "001",
@@ -63,5 +53,45 @@ defmodule Sencha.Handler.Welcome do
     end
 
     {socket, state}
+  end
+
+  def check_for_others({socket, state}, handle) do
+    user_status = Sencha.UserSupervisor.start_child(handle, self())
+
+    case user_status do
+      {:ok, user_pid} ->
+        Logger.debug("#{handle} connects")
+
+        {:cont,
+         {socket,
+          %Sencha.Handler.UserState{
+            state
+            | irc_state: :connected,
+              connected?: true,
+              requested_handle: handle,
+              ping_received?: false,
+              ping_timer: Process.send_after(self(), :ping, Sencha.Handler.get_ping_interval()),
+              timeout_timer: nil,
+              user_process: user_pid,
+              last_ping: DateTime.utc_now(:second)
+          }}
+         |> send_burst()}
+
+      {:error, {:already_started, _}} ->
+        socket
+        |> ThousandIsland.Socket.send(
+          %Sencha.Message{
+            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+            command: "433",
+            params: [handle],
+            trailing: "Account already in use"
+          }
+          |> Sencha.Message.encode()
+        )
+
+        {socket, state} |> Sencha.Handler.quit("Account already in use")
+
+        {:halt, {socket, state}}
+    end
   end
 end
