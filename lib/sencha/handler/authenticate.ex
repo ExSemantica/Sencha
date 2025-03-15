@@ -35,7 +35,8 @@ defmodule Sencha.Handler.Authenticate do
       |> Sencha.Message.encode()
     )
 
-    {:cont, {socket, %Sencha.Handler.UserState{state | sasl_method: :plain}}}
+    {:cont,
+     {socket, %Sencha.Handler.UserState{state | sasl_method: :plain, sasl_streaming?: true}}}
   end
 
   def handle(
