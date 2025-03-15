@@ -36,7 +36,8 @@ defmodule Sencha.Handler.Authenticate do
     )
 
     {:cont,
-     {socket, %Sencha.Handler.UserState{state | sasl_method: :plain, sasl_streaming?: true}}}
+     {socket,
+      %Sencha.Handler.UserState{state | sasl_method: :plain, sasl_streaming?: true, sasl_data: ""}}}
   end
 
   def handle(
@@ -166,7 +167,8 @@ defmodule Sencha.Handler.Authenticate do
           state
           | requested_handle: handle,
             vhost: "user/#{handle}",
-            irc_state: :wait_for_cap_end
+            irc_state: :wait_for_cap_end,
+            sasl_data: :redacted
         }
 
         burst = [
