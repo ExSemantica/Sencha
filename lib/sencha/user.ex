@@ -66,7 +66,7 @@ defmodule Sencha.User do
   @doc """
   Modifies this user's reason to be disconnected
   """
-  def set_quit_reason(pid, reason \\ nil) do
+  def set_quit_reason(pid, reason \\ "Client error") do
     Agent.update(pid, fn state ->
       %{state | quit_reason: reason}
     end)

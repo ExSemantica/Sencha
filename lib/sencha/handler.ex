@@ -196,7 +196,7 @@ defmodule Sencha.Handler do
   @impl ThousandIsland.Handler
   def handle_close(socket, state = %UserState{user_process: user_process}) do
     # This is complicated so I will explain how this all works
-    if not is_nil(user_process) and Process.alive?(user_process) do
+    if Process.alive?(user_process) do
       reason = Sencha.User.get_quit_reason(user_process)
 
       Logger.debug("#{user_process |> Sencha.User.get_handle()} disconnects (#{reason})")
@@ -254,7 +254,7 @@ defmodule Sencha.Handler do
   end
 
   def quit({socket, state = %UserState{user_process: user_process}}, reason) do
-    if not is_nil(user_process) and Process.alive?(user_process) do
+    if Process.alive?(user_process) do
       Sencha.User.set_quit_reason(user_process, reason)
     end
 
