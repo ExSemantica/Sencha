@@ -2,21 +2,23 @@ defmodule Sencha.Handler.Cap do
   @moduledoc """
   Handles CAP capability passing in IRC.
   """
+  @supported_capabilities MapSet.new(["sasl"])
 
   def handle(
-        %Sencha.Message{command: "CAP", params: ["LS", "302"]},
-        {socket,
-         state = %Sencha.Handler.UserState{
-           connected?: false
-         }}
+        %Sencha.Message{command: "CAP", params: ["LS" | _]},
+        {socket, state = %Sencha.Handler.UserState{requested_handle: handle}}
       ) do
+    # The official client only needs to support legacy CAP LS calls
+    # Treat the IRC connections the same way
+    nick = handle || "*"
+    
     socket
     |> ThousandIsland.Socket.send(
       %Sencha.Message{
         prefix: Sencha.ApplicationInfo.get_chat_hostname(),
         command: "CAP",
-        params: ["*", "LS"],
-        trailing: ""
+        params: [nick, "LS"],
+        trailing: "sasl"
       }
       |> Sencha.Message.encode()
     )
@@ -24,11 +26,89 @@ defmodule Sencha.Handler.Cap do
     {:cont, {socket, state}}
   end
 
-  def handle(%Sencha.Message{command: "CAP", params: ["END"]}, {socket, state = %Sencha.Handler.UserState{connected?: false}}) do
+  def handle(
+        %Sencha.Message{command: "CAP", params: ["REQ"], trailing: caps_sent},
+        {socket, state = %Sencha.Handler.UserState{requested_handle: handle, capabilities: old}}
+      ) do
+    new = caps_sent |> String.split(" ")
+
+    # Disable these IRCv3 extensions
+    disabled =
+      new
+      |> Enum.filter(&(String.first(&1) == "-"))
+      |> Enum.map(&String.replace_prefix(&1, "-", ""))
+      |> MapSet.new()
+
+    # Enable these ones and join them with the old set of IRCv3 extensions when 
+    # initially enabled
+    capabilities =
+      new
+      |> Enum.filter(&(String.first(&1) != "-"))
+      |> MapSet.new()
+      |> MapSet.union(old)
+      |> MapSet.difference(disabled)
+
+    supported =
+      capabilities
+      |> MapSet.intersection(@supported_capabilities)
+
+    nick = handle || "*"
+
+    if supported == old do
+      # No capabilities got changed
+      socket
+      |> ThousandIsland.Socket.send(
+        %Sencha.Message{
+          prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+          command: "CAP",
+          params: [nick, "NAK"],
+          trailing: capabilities
+        }
+        |> Sencha.Message.encode()
+      )
+
+      {:cont, {socket, state}}
+    else
+      # Capabilities were changed
+      socket
+      |> ThousandIsland.Socket.send(
+        %Sencha.Message{
+          prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+          command: "CAP",
+          params: [nick, "ACK"],
+          trailing: supported |> Enum.join(" ")
+        }
+        |> Sencha.Message.encode()
+      )
+
+      {:cont, {socket, %Sencha.Handler.UserState{state | capabilities: supported}}}
+    end
+  end
+
+  def handle(
+        %Sencha.Message{command: "CAP", params: ["END"]},
+        {socket, state}
+      ) do
     {:cont, {socket, state}}
   end
 
-  def handle(%Sencha.Message{command: "CAP"}, {socket, state}) do
+  def handle(
+        %Sencha.Message{command: "CAP", params: [invalid | _]},
+        {socket, state = %Sencha.Handler.UserState{requested_handle: handle}}
+      ) do
+    nick = handle || "*"
+
+    socket
+    |> ThousandIsland.Socket.send(
+      %Sencha.Message{
+        prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+        command: "410",
+        params: [nick, invalid],
+        trailing: "Invalid CAP command"
+      }
+      |> Sencha.Message.encode()
+    )
+
     {:cont, {socket, state}}
   end
 end

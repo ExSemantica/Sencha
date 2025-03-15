@@ -20,7 +20,6 @@ defmodule Sencha.Handler do
 
   defmodule UserState do
     defstruct requested_handle: nil,
-              requested_password: nil,
               irc_state: :performing_authentication,
               ping_timer: nil,
               timeout_timer: nil,
@@ -30,7 +29,12 @@ defmodule Sencha.Handler do
               vhost: nil,
               connected?: false,
               ping_received?: false,
-              last_ping: nil
+              last_ping: nil,
+              capabilities: MapSet.new(),
+              capabilities_ok?: false,
+              sasl_method: nil,
+              sasl_data: nil,
+              sasl_streaming?: false
 
     def get_host_mask(%__MODULE__{requested_handle: handle, ident: ident, vhost: vhost}) do
       handle <> "!" <> ident <> "@" <> vhost
@@ -40,6 +44,11 @@ defmodule Sencha.Handler do
   # ===========================================================================
   # Public calls
   # ===========================================================================
+  @doc """
+  Gets the ping interval in milliseconds.
+  """
+  def get_ping_interval, do: @ping_interval
+
   @doc """
   Terminates the specified PID's connection, usually by an administrator.
   """
@@ -152,122 +161,6 @@ defmodule Sencha.Handler do
     reduced = messages |> Enum.reduce_while({socket, state}, &handle_while/2)
 
     case reduced do
-      {_socket,
-       state = %__MODULE__.UserState{
-         irc_state: :authentication_ready,
-         requested_handle: handle,
-         requested_password: password
-       }} ->
-        # TODO: error cases
-        info = lookup_via_gateway(handle, password)
-        host = Sencha.ApplicationInfo.get_chat_hostname()
-
-        case info do
-          {:ok, %{username: real_handle}} ->
-            user_status = Sencha.UserSupervisor.start_child(real_handle, self())
-
-            case user_status do
-              {:ok, user_status_pid} ->
-                Logger.debug("#{real_handle} connects")
-
-                if not is_nil(state.timeout_timer), do: Process.cancel_timer(state.timeout_timer)
-
-                refreshed =
-                  Sencha.ApplicationInfo.get_last_refreshed()
-                  |> Calendar.strftime("%a, %-d %b %Y %X %Z")
-
-                user_status_pid |> Sencha.User.set_modes(["+w"])
-
-                version = Sencha.ApplicationInfo.get_version()
-
-                burst = [
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "001",
-                    params: [real_handle],
-                    trailing: "Welcome to Sencha, " <> real_handle
-                  },
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "002",
-                    params: [real_handle],
-                    trailing: "Your host is " <> host <> ", running version v" <> version
-                  },
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "003",
-                    params: [real_handle],
-                    trailing: "This server was last restarted " <> refreshed
-                  },
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "004",
-                    params: [real_handle, "sencha", version]
-                  },
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "422",
-                    params: [real_handle],
-                    trailing: "MOTD File is unimplemented"
-                  }
-                ]
-
-                for b <- burst do
-                  socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
-                end
-
-                {:continue,
-                 %__MODULE__.UserState{
-                   state
-                   | irc_state: :connected,
-                     connected?: true,
-                     requested_handle: real_handle,
-                     requested_password: nil,
-                     ping_received?: false,
-                     ping_timer: Process.send_after(self(), :ping, @ping_interval),
-                     timeout_timer: nil,
-                     user_process: user_status_pid,
-                     vhost: "user/#{real_handle}",
-                     last_ping: DateTime.utc_now(:second)
-                 }, {:persistent, :infinity}}
-
-              {:error, {:already_started, _}} ->
-                socket
-                |> ThousandIsland.Socket.send(
-                  %Sencha.Message{
-                    prefix: host,
-                    command: "433",
-                    params: [real_handle],
-                    trailing: "Nickname is already in use"
-                  }
-                  |> Sencha.Message.encode()
-                )
-
-                {socket, state} |> quit("Nickname is already in use")
-                {:close, state}
-
-              {:error, :max_children} ->
-                {socket, state} |> quit("Too many users logged in to this server")
-                {:close, state}
-            end
-
-          {:error, :authentication_failed} ->
-            {socket, state} |> quit("Authentication failed")
-            {:close, state}
-
-          {:error, :no_such_item} ->
-            {socket, state} |> quit("Invalid user")
-            {:close, state}
-
-          {:error, :no_gateway} ->
-            {socket, state} |> quit("No gateway available to handle user information")
-            {:close, state}
-
-          {:error, :gateway_timeout} ->
-            {socket, state} |> quit("User information gateway timeout")
-            {:close, state}
-        end
-
       {_socket,
        state = %__MODULE__.UserState{
          connected?: true,
@@ -404,14 +297,6 @@ defmodule Sencha.Handler do
     __MODULE__.Cap.handle(message, socket_state)
   end
 
-  defp handle_while(message = %Sencha.Message{command: "PASS"}, socket_state) do
-    __MODULE__.Pass.handle(message, socket_state)
-  end
-
-  defp handle_while(message = %Sencha.Message{command: "NICK"}, socket_state) do
-    __MODULE__.Nick.handle(message, socket_state)
-  end
-
   defp handle_while(message = %Sencha.Message{command: "PONG"}, socket_state) do
     __MODULE__.Pong.handle(message, socket_state)
   end
@@ -432,6 +317,18 @@ defmodule Sencha.Handler do
     __MODULE__.Part.handle(message, socket_state)
   end
 
+  defp handle_while(
+         message = %Sencha.Message{command: "AUTHENTICATE"},
+         socket_state = {_socket, state = %UserState{capabilities: capabilities}}
+       ) do
+    if state.capabilities_ok? and capabilities |> MapSet.member?("sasl") do
+      # We have SASL enabled and we gave a CAP END, proceed...
+      __MODULE__.Authenticate.handle(message, socket_state)
+    else
+      {:cont, socket_state}
+    end
+  end
+
   defp handle_while(%Sencha.Message{command: "QUIT", trailing: nil}, socket_state) do
     {:halt, socket_state |> quit("Client Quit")}
   end
@@ -439,32 +336,9 @@ defmodule Sencha.Handler do
   defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
     {:halt, socket_state |> quit("Client Quit: " <> reason)}
   end
-  
+
   defp handle_while(message, socket_state) do
     Logger.debug("Unimplemented IRC message: #{inspect(message)}")
     {:cont, socket_state}
-  end
-
-  defp lookup_via_gateway(username, password) do
-    # Look for nearest gateway
-    fastest_node = Sencha.Gateway.fastest_node()
-
-    # Try to get info from the nearest gateway
-    if is_nil(fastest_node) do
-      {:error, :no_gateway}
-    else
-      Sencha.Gateway.user_info(fastest_node, self(), username, password)
-
-      receive do
-        {Exsemantica.Gateway, ^fastest_node, {:user_info, {:ok, info}}} ->
-          {:ok, info}
-
-        {Exsemantica.Gatewat, ^fastest_node, {:user_info, {:error, what}}} ->
-          {:error, what}
-      after
-        5000 ->
-          {:error, :gateway_timeout}
-      end
-    end
   end
 end
