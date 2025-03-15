@@ -296,7 +296,7 @@ defmodule Sencha.Handler do
   end
 
   def quit({socket, state = %UserState{user_process: user_process}}, reason) do
-    if Process.alive?(user_process) do
+    if not is_nil(user_process) and Process.alive?(user_process) do
       Sencha.User.set_quit_reason(user_process, reason)
     end
 
