@@ -65,6 +65,10 @@ defmodule Sencha.Handler do
     GenServer.cast(pid, {:recv_privmsg, source, message})
   end
 
+  def try_authorize(pid, handle) do
+    GenServer.cast(pid, {:try_authorize, handle})
+  end
+
   # ===========================================================================
   # Initial connection
   # ===========================================================================
@@ -117,6 +121,41 @@ defmodule Sencha.Handler do
     )
 
     {:noreply, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_cast({:try_authorize, handle}, {socket, state}) do
+    case Sencha.UserSupervisor.start_child(handle, self()) do
+      {:ok, user_pid} ->
+        Logger.debug("#{handle} connects")
+
+        {:noreply,
+         {socket,
+          %UserState{
+            state
+            | irc_state: :connected,
+              connected?: true,
+              requested_handle: handle,
+              ping_received?: true,
+              user_process: user_pid
+          }}
+         |> Sencha.Handler.Welcome.send_burst(), {:persistent, :infinity}}
+
+      {:error, {:already_started, _}} ->
+        socket
+        |> ThousandIsland.Socket.send(
+          %Sencha.Message{
+            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+            command: "433",
+            params: [handle],
+            trailing: "Account already in use"
+          }
+          |> Sencha.Message.encode()
+        )
+
+        {:noreply, {socket, state} |> Sencha.Handler.quit("Account already in use"),
+         socket.read_timeout}
+    end
   end
 
   @impl GenServer
@@ -254,43 +293,6 @@ defmodule Sencha.Handler do
     {socket, state} |> quit("Server is shutting down")
 
     :ok
-  end
-
-  def check_for_others({socket, state}, handle) do
-    user_status = Sencha.UserSupervisor.start_child(handle, socket)
-
-    case user_status do
-      {:ok, user_pid} ->
-        Logger.debug("#{handle} connects")
-
-        {:cont,
-         {socket,
-          %UserState{
-            state
-            | irc_state: :connected,
-              connected?: true,
-              requested_handle: handle,
-              ping_received?: true,
-              user_process: user_pid
-          }}
-         |> Sencha.Handler.Welcome.send_burst()}
-
-      {:error, {:already_started, _}} ->
-        socket
-        |> ThousandIsland.Socket.send(
-          %Sencha.Message{
-            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-            command: "433",
-            params: [handle],
-            trailing: "Account already in use"
-          }
-          |> Sencha.Message.encode()
-        )
-
-        {socket, state} |> Sencha.Handler.quit("Account already in use")
-
-        {:halt, {socket, state}}
-    end
   end
 
   def quit({socket, state = %UserState{user_process: user_process}}, reason) do
