@@ -140,7 +140,8 @@ defmodule Sencha.Handler.Authenticate do
          sasl_data,
          {socket, state = %Sencha.Handler.UserState{requested_handle: requested_handle}}
        ) do
-    split_data = sasl_data |> Base.decode64() |> String.split("\x00")
+    {:ok, decoded} = sasl_data |> Base.decode64()
+    split_data = decoded |> String.split("\x00")
 
     user_info =
       cond do
