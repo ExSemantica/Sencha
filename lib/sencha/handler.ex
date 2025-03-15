@@ -255,7 +255,7 @@ defmodule Sencha.Handler do
 
   def quit({socket, state = %UserState{user_process: user_process}}, reason) do
     if not is_nil(user_process) and Process.alive?(user_process) do
-      Sencha.User.set_quit_reason(reason)
+      Sencha.User.set_quit_reason(user_process, reason)
     end
 
     # Notify the client of the connection termination
