@@ -70,8 +70,6 @@ defmodule Sencha.Handler.Welcome do
               connected?: true,
               requested_handle: handle,
               ping_received?: false,
-              ping_timer: Process.send_after(self(), :ping, Sencha.Handler.get_ping_interval()),
-              timeout_timer: nil,
               user_process: user_pid,
               last_ping: DateTime.utc_now(:second)
           }}

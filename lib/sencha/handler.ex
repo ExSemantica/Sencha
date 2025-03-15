@@ -13,7 +13,7 @@ defmodule Sencha.Handler do
   @timeout_auth 10_000
 
   # Ping interval in milliseconds
-  @ping_interval 60_000
+  @ping_interval 15_000
 
   # Ping timeout in milliseconds
   @ping_timeout 5_000
@@ -342,11 +342,11 @@ defmodule Sencha.Handler do
   end
 
   defp handle_while(%Sencha.Message{command: "QUIT", trailing: nil}, socket_state) do
-    {:halt, socket_state |> quit("Client Quit")}
+    {:halt, socket_state |> quit("Client quit")}
   end
 
   defp handle_while(%Sencha.Message{command: "QUIT", trailing: reason}, socket_state) do
-    {:halt, socket_state |> quit("Client Quit: " <> reason)}
+    {:halt, socket_state |> quit("Client quit: " <> reason)}
   end
 
   defp handle_while(message, socket_state) do
