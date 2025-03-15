@@ -12,7 +12,7 @@ defmodule Sencha.User do
 
     Agent.start_link(
       fn ->
-        %{handle: handle, socket: socket, channels: MapSet.new(), modes: MapSet.new(), quit_reason: nil}
+        %{handle: handle, socket: socket, channels: MapSet.new(), modes: MapSet.new(), quit_reason: "Client error"}
       end,
       name: where
     )
