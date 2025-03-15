@@ -25,6 +25,16 @@ defmodule Sencha.Handler.Authenticate do
   end
 
   def handle(%Sencha.Message{command: "AUTHENTICATE", params: ["PLAIN"]}, {socket, state}) do
+    socket
+    |> ThousandIsland.Socket.send(
+      %Sencha.Message{
+        prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+        command: "AUTHENTICATE",
+        params: ["+"]
+      }
+      |> Sencha.Message.encode()
+    )
+
     {:cont, {socket, %Sencha.Handler.UserState{state | sasl_method: :plain}}}
   end
 
@@ -39,13 +49,6 @@ defmodule Sencha.Handler.Authenticate do
       )
       when rem(byte_size(data), 400) == 0 do
     data |> try_authenticate({socket, state})
-  end
-
-  def handle(
-        %Sencha.Message{command: "AUTHENTICATE", params: ["+"]},
-        {socket, state = %Sencha.Handler.UserState{sasl_method: :plain}}
-      ) do
-    {:cont, {socket, %Sencha.Handler.UserState{state | sasl_streaming?: true}}}
   end
 
   def handle(
@@ -160,7 +163,7 @@ defmodule Sencha.Handler.Authenticate do
       {:error, error} ->
         nick = requested_handle || "*"
 
-        Logger.debug("A user fails to authenticate: #{inspect error}")
+        Logger.debug("A user fails to authenticate: #{inspect(error)}")
 
         socket
         |> ThousandIsland.Socket.send(
@@ -208,6 +211,7 @@ defmodule Sencha.Handler.Authenticate do
     case user_status do
       {:ok, user_pid} ->
         Logger.debug("#{handle} connects")
+
         {:cont,
          {socket,
           %Sencha.Handler.UserState{
