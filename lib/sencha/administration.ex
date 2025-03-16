@@ -4,10 +4,18 @@ defmodule Sencha.Administration do
   """
 
   @doc """
-  Convenience for `Sencha.UserSupervisor.broadcast_wallops/1`.
+  Convenience to broadcast a message to all users with mode +w in this server.
   """
-  def announce(message) do
-    Sencha.UserSupervisor.broadcast_wallops("[Announcement] " <> message)
+  def wallops(message) do
+    Sencha.UserPool.all()
+    |> Enum.map(fn username ->
+      case Registry.lookup(Sencha.UserRegistry, username) do
+        [{user_pid, _}] -> Sencha.User.wallops(user_pid, message)
+        [] -> :ok
+      end
+    end)
+
+    :ok
   end
 
   @doc """

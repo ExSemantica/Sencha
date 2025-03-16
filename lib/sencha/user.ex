@@ -7,7 +7,7 @@ defmodule Sencha.User do
   @doc """
   Initializes this user's state
   """
-  def start_link(_init_arg, handle: handle, socket: socket) do
+  def start_link(socket: socket, handle: handle) do
     where = {:via, Registry, {Sencha.UserRegistry, handle}}
 
     Agent.start_link(
@@ -17,7 +17,7 @@ defmodule Sencha.User do
           socket: socket,
           channels: MapSet.new(),
           modes: MapSet.new(),
-          quit_reason: "Client initiated disconnect"
+          quit_reason: "Client error"
         }
       end,
       name: where

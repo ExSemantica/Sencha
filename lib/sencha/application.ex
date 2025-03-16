@@ -18,7 +18,7 @@ defmodule Sencha.Application do
       # {Sencha.Worker, arg}
       {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
       Sencha.ChannelSupervisor,
-      Sencha.UserSupervisor,
+      Sencha.UserPool,
       {Registry, keys: :unique, name: Sencha.ChannelRegistry},
       {Registry, keys: :unique, name: Sencha.UserRegistry},
       {Cluster.Supervisor,

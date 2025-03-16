@@ -280,9 +280,10 @@ defmodule Sencha.Handler do
       ) do
     # IRC will connect since the capabilities handshake ended
     # This happens based on IRCv3 SASL and CAP specs
-    case Sencha.UserSupervisor.start_child(handle, self()) do
+    case Sencha.User.start_link(socket: self(), handle: handle) do
       {:ok, user_pid} ->
         Logger.debug("#{handle} connects")
+        Sencha.UserPool.insert(handle)
 
         {:noreply,
          {socket,
@@ -526,8 +527,10 @@ defmodule Sencha.Handler do
     # This is complicated so I will explain how this all works
     if Process.alive?(user_process) do
       reason = Sencha.User.get_quit_reason(user_process)
+      handle = user_process |> Sencha.User.get_handle()
 
-      Logger.debug("#{user_process |> Sencha.User.get_handle()} disconnects (#{reason})")
+      Logger.debug("#{handle} disconnects (#{reason})")
+      Sencha.UserPool.delete(handle)
 
       receivers =
         user_process
@@ -596,6 +599,7 @@ defmodule Sencha.Handler do
     # Close the client socket, the handle_close callback will wipe the socket
     # from the User Supervisor
     socket |> ThousandIsland.Socket.shutdown(:read_write)
+    socket |> ThousandIsland.Socket.close()
 
     # NOTE: Will this cause lingering states?
     {socket, state}
