@@ -1,4 +1,4 @@
-defmodule Sencha.Handler.Welcome do
+defmodule Sencha.Welcome do
   @moduledoc """
   Handles client connections after SASL and CAP succeed
   """
@@ -50,6 +50,6 @@ defmodule Sencha.Handler.Welcome do
       socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
     end
 
-    {socket, state}
+    :ok
   end
 end

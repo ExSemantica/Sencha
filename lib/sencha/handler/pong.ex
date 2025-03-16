@@ -1,14 +1,10 @@
 defmodule Sencha.Handler.Pong do
   @moduledoc """
-  Handles receiving client pong in IRC
+  Handles receiving client PONG in IRC
   """
-  def handle(
-        %Sencha.Message{command: "PONG"},
-        {socket,
-         state = %Sencha.Handler.UserState{
-           ping_received?: false
-         }}
-      ) do
-    {:cont, {socket, %Sencha.Handler.UserState{state | ping_received?: true}}}
+  def handle(pid, _message, _socket) do
+    # All that needs to be done is to send the ping acknowledge message to the
+    # socket PID
+    send(pid, :ping_acknowledged)
   end
 end
