@@ -10,7 +10,7 @@ defmodule Sencha.Handler do
 
   # Wait this long in milliseconds for NICK and PASS before disconnecting
   # Note that USER isn't implemented here
-  @timeout_auth 10_000
+  @timeout_auth 5_000
 
   # Ping interval in milliseconds
   @ping_interval 15_000
@@ -76,7 +76,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(_socket, _state) do
-    {:continue, %UserState{}, {:persistent, @timeout_auth}}
+    {:continue, %UserState{}, @timeout_auth}
   end
 
   # ===========================================================================
@@ -628,7 +628,7 @@ defmodule Sencha.Handler do
           socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
         end
 
-        {:noreply, {socket, new_state}, {:persistent, :infinity}}
+        {:noreply, {socket, new_state}, :infinity}
 
       {:error, error} ->
         Logger.debug("Client fails to authenticate: #{inspect(error)}", socket_pid: self())
