@@ -290,7 +290,7 @@ defmodule Sencha.Handler do
               ping_received?: true,
               user_process: user_pid
           }}
-         |> __MODULE__.Welcome.send_burst(), {:persistent, :infinity}}
+         |> Sencha.Welcome.send_burst(), {:persistent, :infinity}}
 
       {:error, {:already_started, _}} ->
         socket

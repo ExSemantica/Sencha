@@ -50,6 +50,6 @@ defmodule Sencha.Welcome do
       socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
     end
 
-    :ok
+    {socket, state}
   end
 end
