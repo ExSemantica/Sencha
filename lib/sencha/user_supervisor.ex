@@ -31,14 +31,6 @@ defmodule Sencha.UserSupervisor do
   Deletes a user from the supervisor before `Sencha.Handler` disconnects it.
   """
   def terminate_child(pid) do
-    # We have to un-register the entry in the user registry, I think.
-    keys = Registry.keys(Sencha.UserRegistry, pid)
-
-    case keys do
-      [user] -> Registry.unregister(Sencha.UserRegistry, user)
-      [] -> :ok
-    end
-  
     :ok = DynamicSupervisor.terminate_child(__MODULE__, pid)
   end
 

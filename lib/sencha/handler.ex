@@ -290,7 +290,7 @@ defmodule Sencha.Handler do
             state
             | irc_state: :connected,
               connected?: true,
-              ping_received?: true,
+              ping_timer: Process.send_after(self(), :ping, @ping_interval),
               user_process: user_pid
           }}
          |> Sencha.Welcome.send_burst(), :infinity}
@@ -595,6 +595,7 @@ defmodule Sencha.Handler do
 
     # Close the client socket, the handle_close callback will wipe the socket
     # from the User Supervisor
+    socket |> ThousandIsland.Socket.shutdown(:read_write)
     socket |> ThousandIsland.Socket.close()
 
     # NOTE: Will this cause lingering states?
