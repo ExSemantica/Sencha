@@ -175,6 +175,7 @@ defmodule Sencha.Handler do
     {:noreply, {socket, state}, socket.read_timeout}
   end
 
+  @impl GenServer
   def handle_info(
         {:capabilities_set, new},
         {socket, state = %UserState{capabilities: old, requested_handle: handle}}
@@ -481,6 +482,7 @@ defmodule Sencha.Handler do
     data
     |> Sencha.Message.decode()
     |> Stream.each(fn message -> send(self(), {:irc_message, message}) end)
+    |> Stream.run()
 
     {:continue, state, socket.read_timeout}
   end
