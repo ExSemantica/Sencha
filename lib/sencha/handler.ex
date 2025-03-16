@@ -560,9 +560,8 @@ defmodule Sencha.Handler do
           |> Sencha.Message.encode()
         )
       end
-
-      Sencha.UserSupervisor.terminate_child(user_process)
     end
+    Sencha.UserSupervisor.terminate_child(user_process)
 
     :ok
   end
