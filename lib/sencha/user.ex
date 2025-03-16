@@ -17,7 +17,7 @@ defmodule Sencha.User do
           socket: socket,
           channels: MapSet.new(),
           modes: MapSet.new(),
-          quit_reason: "Client error"
+          quit_reason: "Client initiated disconnect"
         }
       end,
       name: where

@@ -18,6 +18,8 @@ defmodule Sencha.Handler do
   # Ping timeout in milliseconds
   @ping_timeout 5_000
 
+  @regex_ctcp_action ~r/\x01ACTION (?<action>.+)\x01/
+
   defmodule UserState do
     defstruct requested_handle: nil,
               irc_state: :performing_authentication,
@@ -314,6 +316,36 @@ defmodule Sencha.Handler do
     {:noreply, {socket, %UserState{state | irc_state: :connected}}, socket.read_timeout}
   end
 
+  def handle_info(:too_many, {socket, state = %UserState{requested_handle: handle}}) do
+    socket
+    |> ThousandIsland.Socket.send(
+      %Sencha.Message{
+        prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+        command: "407",
+        params: [handle],
+        trailing: "Too many recipients"
+      }
+      |> Sencha.Message.encode()
+    )
+
+    {:noreply, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_info({:message_these, recipients, message}, {socket, state}) do
+    {:noreply, {socket, state} |> direct_message(recipients, message), socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_info({:join_these, recipients}, {socket, state}) do
+    {:noreply, {socket, state} |> join(recipients), socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_info({:part_these, recipients, reason}, {socket, state}) do
+    {:noreply, {socket, state} |> part(recipients, reason), socket.read_timeout}
+  end
+
   @impl GenServer
   def handle_info({:irc_message, message = %Sencha.Message{command: command}}, {socket, state}) do
     case command do
@@ -435,16 +467,16 @@ defmodule Sencha.Handler do
         __MODULE__.Ping.handle(self(), message, socket)
         {:noreply, {socket, state}, socket.read_timeout}
 
-      "PRIVMSG" ->
-        # __MODULE__.Privmsg.handle(self(), message, socket)
+      "PRIVMSG" when state.connected? ->
+        __MODULE__.Privmsg.handle(self(), message, socket)
         {:noreply, {socket, state}, socket.read_timeout}
 
-      "JOIN" ->
-        # __MODULE__.Join.handle(self(), message, socket)
+      "JOIN" when state.connected? ->
+        __MODULE__.Join.handle(self(), message, socket)
         {:noreply, {socket, state}, socket.read_timeout}
 
-      "PART" ->
-        # __MODULE__.Part.handle(self(), message, socket)
+      "PART" when state.connected? ->
+        __MODULE__.Part.handle(self(), message, socket)
         {:noreply, {socket, state}, socket.read_timeout}
 
       "QUIT" when is_nil(message.trailing) ->
@@ -457,20 +489,7 @@ defmodule Sencha.Handler do
         {socket, state} |> quit("Client quit: " <> message.trailing)
         {:noreply, {socket, state}, socket.read_timeout}
 
-      "NICK" ->
-        Logger.debug("Ignoring NICK from client", socket_pid: self())
-        {:noreply, {socket, state}, socket.read_timeout}
-
-      "USER" ->
-        Logger.debug("Ignoring USER from client", socket_pid: self())
-        {:noreply, {socket, state}, socket.read_timeout}
-
-      "PASS" ->
-        Logger.debug("Ignoring PASS from client", socket_pid: self())
-        {:noreply, {socket, state}, socket.read_timeout}
-
       _message ->
-        Logger.debug("Unimplemented IRC message: #{inspect(message)}", socket_pid: self())
         {:noreply, {socket, state}, socket.read_timeout}
     end
   end
@@ -550,7 +569,7 @@ defmodule Sencha.Handler do
 
   @impl ThousandIsland.Handler
   def handle_error(_reason, socket, state) do
-    {socket, state} |> quit("Server error")
+    {socket, state} |> quit("Server initiated disconnect")
 
     :ok
   end
@@ -668,6 +687,125 @@ defmodule Sencha.Handler do
         5000 ->
           {:error, :gateway_timeout}
       end
+    end
+  end
+
+  defp direct_message({socket, state}, [], _message) do
+    {socket, state}
+  end
+
+  defp direct_message(
+         {socket, state = %UserState{requested_handle: handle}},
+         [recipient | recipients],
+         message
+       ) do
+    if recipient |> String.starts_with?("#") do
+      case Registry.lookup(Sencha.ChannelRegistry, recipient) do
+        [{pid, _}] ->
+          Sencha.Channel.talk(pid, {socket, state}, message)
+          format_message(recipient, handle, message)
+
+        [] ->
+          socket
+          |> ThousandIsland.Socket.send(
+            %Sencha.Message{
+              prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+              command: "403",
+              params: [handle, recipient],
+              trailing: "No such aggregate"
+            }
+            |> Sencha.Message.encode()
+          )
+      end
+    else
+      case Registry.lookup(Sencha.UserRegistry, recipient) do
+        [{pid, _}] ->
+          Sencha.User.send(pid, {socket, state}, message)
+          format_message(recipient, handle, message)
+
+        [] ->
+          socket
+          |> ThousandIsland.Socket.send(
+            %Sencha.Message{
+              prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+              command: "401",
+              params: [handle, recipient],
+              trailing: "No such user"
+            }
+            |> Sencha.Message.encode()
+          )
+      end
+    end
+
+    direct_message({socket, state}, recipients, message)
+  end
+
+  defp join({socket, state}, []) do
+    {socket, state}
+  end
+
+  defp join({socket, state = %UserState{requested_handle: handle}}, [recipient | recipients]) do
+    case Sencha.ChannelSupervisor.start_child(recipient) do
+      {:ok, pid} ->
+        Logger.debug("#{handle} joins channel #{recipient}", socket_pid: self())
+        Sencha.Channel.join(pid, {socket, state})
+
+      {:error, {:already_started, pid}} ->
+        Logger.debug("#{handle} joins channel #{recipient}", socket_pid: self())
+        Sencha.Channel.join(pid, {socket, state})
+
+      {:error, :no_such_item} ->
+        socket
+        |> ThousandIsland.Socket.send(
+          %Sencha.Message{
+            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+            command: "403",
+            params: [handle, recipient],
+            trailing: "No such aggregate"
+          }
+          |> Sencha.Message.encode()
+        )
+    end
+
+    join({socket, state}, recipients)
+  end
+
+  defp part({socket, state}, [], _reason) do
+    {socket, state}
+  end
+
+  defp part(
+         {socket, state = %UserState{requested_handle: handle}},
+         [recipient | recipients],
+         reason
+       ) do
+    case Registry.lookup(Sencha.ChannelRegistry, recipient) do
+      [{pid, _}] ->
+        Logger.debug("#{handle} leaves channel #{recipient} (#{reason})")
+        Sencha.Channel.part(pid, {socket, state}, reason)
+
+      [] ->
+        socket
+        |> ThousandIsland.Socket.send(
+          %Sencha.Message{
+            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+            command: "403",
+            params: [handle, recipient],
+            trailing: "No such aggregate"
+          }
+          |> Sencha.Message.encode()
+        )
+    end
+
+    part({socket, state}, recipients, reason)
+  end
+
+  defp format_message(recipient, handle, message) do
+    if message =~ @regex_ctcp_action do
+      converted = Regex.named_captures(@regex_ctcp_action, message)
+      Logger.debug("[#{recipient}] * #{handle} #{converted["action"]}", socket_pid: self())
+    else
+      Logger.debug("[#{recipient}] <#{handle}> #{message}", socket_pid: self())
     end
   end
 end
