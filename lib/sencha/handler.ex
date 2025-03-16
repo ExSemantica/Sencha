@@ -628,7 +628,7 @@ defmodule Sencha.Handler do
           socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
         end
 
-        {:noreply, {socket, new_state}, :infinity}
+        {:noreply, {socket, new_state}, {:persistent, :infinity}}
 
       {:error, error} ->
         Logger.debug("Client fails to authenticate: #{inspect(error)}", socket_pid: self())
