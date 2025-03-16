@@ -381,11 +381,12 @@ defmodule Sencha.Handler do
 
           has_sasl? and state.sasl_streaming? ->
             {:noreply,
-             %UserState{
-               state
-               | sasl_streaming?: false,
-                 sasl_data: state.sasl_data <> sasl_data
-             }, socket.read_timeout}
+             {socket,
+              %UserState{
+                state
+                | sasl_streaming?: false,
+                  sasl_data: state.sasl_data <> sasl_data
+              }}, socket.read_timeout}
 
           has_sasl? and sasl_data == "PLAIN" ->
             socket
@@ -398,10 +399,11 @@ defmodule Sencha.Handler do
             )
 
             {:noreply,
-             %UserState{
-               state
-               | sasl_streaming?: true
-             }, socket.read_timeout}
+             {socket,
+              %UserState{
+                state
+                | sasl_streaming?: true
+              }}, socket.read_timeout}
 
           has_sasl? ->
             socket
