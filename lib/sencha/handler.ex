@@ -32,7 +32,7 @@ defmodule Sencha.Handler do
               last_ping: nil,
               capabilities: MapSet.new(),
               capabilities_ok?: false,
-              sasl_data: nil,
+              sasl_data: "",
               sasl_streaming?: false
 
     def get_host_mask(%__MODULE__{requested_handle: handle, ident: ident, vhost: vhost}) do
