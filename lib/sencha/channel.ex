@@ -13,15 +13,38 @@ defmodule Sencha.Channel do
     GenServer.start_link(__MODULE__, [aggregate: aggregate], name: where)
   end
 
+  @doc """
+  Makes the specified username join
+  """
   def join(pid, user), do: GenServer.cast(pid, {:join, user})
+
+  @doc """
+  Makes the specified username part
+  """
   def part(pid, user, reason \\ nil), do: GenServer.cast(pid, {:part, user, reason})
+
+  @doc """
+  Makes the specified username talk
+  """
   def talk(pid, user, message), do: GenServer.cast(pid, {:talk, user, message})
+
+  @doc """
+  Makes the specified username quit
+  """
   def quit(pid, user), do: GenServer.cast(pid, {:quit, user})
+
+  @doc """
+  Gets all usernames in the channel
+  """
   def get_users(pid), do: GenServer.call(pid, :get_users)
+
+  @doc """
+  Gets the channel's name
+  """
   def get_name(pid), do: GenServer.call(pid, :get_name)
 
   # ===========================================================================
-  # GenServer callbacks
+  # Behavioral callbacks
   # ===========================================================================
   @impl true
   def init(aggregate: aggregate) do
@@ -31,7 +54,7 @@ defmodule Sencha.Channel do
          %{
            channel: "#" <> (info.aggregate |> String.downcase()),
            topic: info.description,
-           users: [],
+           usernames: MapSet.new(),
            created: info.inserted_at |> DateTime.to_unix()
          }}
 
@@ -41,100 +64,10 @@ defmodule Sencha.Channel do
   end
 
   @impl true
-  def handle_cast(
-        {:join,
-         {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}}},
-        state = %{users: users, channel: channel, topic: topic, created: created}
-      ) do
-    if {user_socket, user_process} in users do
-      # We're already in the channel?
-      {:noreply, state}
-    else
-      # Add the user to the socket list
-      state = %{state | users: [{user_socket, user_process} | users]}
-
-      # Send a join message to everyone
-      for {other_socket, _} <- state.users do
-        other_socket |> __MODULE__.Helpers.join(state.channel, user_state)
-      end
-
-      # Send the channel topic and usernames to whoever just joined
-      user_socket
-      |> __MODULE__.Helpers.send_topic(channel, user_state, topic, created)
-      |> __MODULE__.Helpers.send_names(channel, user_state, state.users)
-
-      # Send channel join acknowledgement to the user's state agent
-      Sencha.User.join(user_process, self())
-
-      {:noreply, state}
-    end
+  def handle_cast({:join, user}, state) do
+    
   end
 
-  @impl true
-  def handle_cast(
-        {:part, {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}},
-         reason},
-        state = %{users: users, channel: channel}
-      ) do
-    if {user_socket, user_process} in users do
-      # Notify others about the user leaving
-      for {other_socket, _} <- users do
-        other_socket |> __MODULE__.Helpers.part(channel, user_state, reason)
-      end
-
-      # Send channel part acknowledgement to the user's state agent
-      Sencha.User.part(user_process, self())
-
-      # Remove user from the channel socket list
-      {:noreply, %{state | users: users |> List.delete({user_socket, user_process})}}
-    else
-      # We're not in the channel?
-      user_socket
-      |> __MODULE__.Helpers.not_on_channel(channel, user_state)
-    end
-  end
-
-  @impl true
-  def handle_cast(
-        {:quit, {user_socket, %Sencha.Handler.UserState{user_process: user_process}}},
-        state = %{users: users}
-      ) do
-    # The user should have had their quit message sent already by now
-    {:noreply, %{state | users: users |> List.delete({user_socket, user_process})}}
-  end
-
-  @impl true
-  def handle_cast(
-        {:talk, {user_socket, user_state = %Sencha.Handler.UserState{user_process: user_process}},
-         message},
-        state = %{users: users, channel: channel}
-      ) do
-    if {user_socket, user_process} in users do
-      # User's in the channel
-      for {receiver_socket, receiver_process} <- users do
-        # The user sending the message already has it buffered on their IRC
-        # client 
-        if receiver_process != user_process do
-          receiver_socket
-          |> __MODULE__.Helpers.talk(channel, user_state, message)
-        end
-      end
-    else
-      # User's not in the channel, let's not send the message
-      # This isn't up to IRC spec, but we're going to enforce it anymway.
-      user_socket
-      |> __MODULE__.Helpers.not_on_channel(channel, user_state)
-    end
-
-    # Talking on IRC doesn't affect channel state directly
-    {:noreply, state}
-  end
-
-  @impl true
-  def handle_call(:get_users, _from, state = %{users: users}), do: {:reply, users, state}
-
-  @impl true
-  def handle_call(:get_name, _from, state = %{channel: channel}), do: {:reply, channel, state}
   # ===========================================================================
   # Private calls
   # ===========================================================================

@@ -1,41 +1,158 @@
 defmodule Sencha.UserPool do
   @moduledoc """
   Stores all users for easy iteration.
+
+  Also has the duty of pinging users.
   """
-  use Agent
+  # Ping interval in milliseconds
+  @ping_interval 10_000
+
+  # Ping timeout in milliseconds
+  @ping_timeout @ping_interval + 5_000
+
+  use GenServer
+  require Logger
+
+  defmodule Entry do
+    defstruct ping_timer: nil,
+              timeout_timer: nil,
+              socket_pid: nil,
+              last_ping: DateTime.utc_now(:second),
+              channels: MapSet.new()
+  end
 
   @doc """
   Starts the user pool.
   """
   def start_link([]) do
-    Agent.start_link(fn -> MapSet.new() end, name: __MODULE__)
+    GenServer.start_link(__MODULE__, [], name: __MODULE__)
   end
 
   @doc """
-  Inserts a username into the pool.
+  Logs a username into the pool.
   """
-  def insert(user) do
-    Agent.update(__MODULE__, & MapSet.put(&1, user))
+  def log_in(user) do
+    GenServer.handle_call(__MODULE__, {:log_in, user})
   end
 
   @doc """
-  Deletes a username from the pool.
+  Gets this user's channels.
   """
-  def delete(user) do
-    Agent.update(__MODULE__, & MapSet.delete(&1, user))
+  def get_channels(user) do
+    GenServer.handle_call(__MODULE__, {:get_channels, user})
   end
 
   @doc """
-  Checks if a user is in the pool.
+  Gets this user's socket PID.
   """
-  def member?(user) do
-    Agent.get(__MODULE__, & MapSet.member?(&1, user))
+  def get_socket(user) do
+    GenServer.handle_call(__MODULE__, {:get_socket, user})
   end
 
   @doc """
-  Returns the pool members.
+  Logs a username out of the pool.
+  """
+  def log_out(user, reason) do
+    GenServer.handle_cast(__MODULE__, {:log_out, user, reason})
+  end
+
+  @doc """
+  Returns the pool usernames.
   """
   def all() do
-    Agent.get(__MODULE__, & &1)
+    GenServer.handle_call(__MODULE__, :all)
+  end
+
+  # ===========================================================================
+  # Behavioral callbacks
+  # ===========================================================================
+  @impl true
+  def init([]) do
+    {:ok, %{}}
+  end
+
+  @impl true
+  def handle_call({:log_in, user}, _from, state) when is_map_key(state, user) do
+    {:reply, {:error, :already_started}, state}
+  end
+
+  @impl true
+  def handle_call({:log_in, user}, from, state) do
+    Logger.debug("#{user} connects")
+
+    {:reply, :ok,
+     state
+     |> put_in([user], %Entry{
+       ping_timer: Process.send_after(from, {:ping, self()}, @ping_interval),
+       timeout_timer: Process.send_after(self(), {:timeout, user}, @ping_timeout),
+       socket_pid: from
+     })}
+  end
+
+  @impl true
+  def handle_call({:get_channels, user}, _from, state) when is_map_key(state, user) do
+    {:reply, {:ok, state |> get_in([user, :channels])}, state}
+  end
+
+  @impl true
+  def handle_call({:get_channels, user}, _from, state) do
+    {:reply, {:error, :not_found}, state}
+  end
+
+  @impl true
+  def handle_call({:get_socket, user}, _from, state) when is_map_key(state, user) do
+    {:reply, {:ok, state |> get_in([user, :socket_pid])}, state}
+  end
+
+  @impl true
+  def handle_call({:get_socket, user}, _from, state) do
+    {:reply, {:error, :not_found}, state}
+  end
+
+  @impl true
+  def handle_cast({:log_out, user, reason}, state) when is_map_key(state, user) do
+    Logger.debug("#{user} disconnects (#{reason})")
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast({:log_out, _user, _reason}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:timeout, user}, state) when is_map_key(state, user) do
+    last_ping = state |> get_in([user, :last_ping])
+
+    log_out(
+      user,
+      "Ping timeout: (#{DateTime.utc_now(:second) |> DateTime.diff(last_ping, :second)} seconds)"
+    )
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:timeout, _user}, state) do
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_info({:pong, from, user}, state) when is_map_key(state, user) do
+    # Cancel pending ping and timeout disconnects
+    Process.cancel_timer(state |> get_in([user, :timeout_timer]))
+    Process.cancel_timer(state |> get_in([user, :ping_timer]))
+
+    {:noreply,
+     state
+     |> update_in([user], fn data ->
+       %Entry{
+         data
+         | ping_timer: Process.send_after(from, {:ping, self()}, @ping_interval),
+           timeout_timer: Process.send_after(self(), {:timeout, user}, @ping_timeout),
+           last_ping: DateTime.utc_now(:second)
+       }
+     end)}
   end
 end

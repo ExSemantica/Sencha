@@ -12,26 +12,18 @@ defmodule Sencha.Handler do
   # Note that USER isn't implemented here
   @timeout_auth 5_000
 
-  # Ping interval in milliseconds
-  @ping_interval 15_000
-
-  # Ping timeout in milliseconds
-  @ping_timeout 5_000
 
   @regex_ctcp_action ~r/\x01ACTION (?<action>.+)\x01/
 
   defmodule UserState do
     defstruct requested_handle: nil,
               irc_state: :performing_authentication,
-              ping_timer: nil,
               timeout_timer: nil,
               authentication_timer: nil,
               user_process: nil,
               ident: "~Sencha",
               vhost: nil,
               connected?: false,
-              ping_received?: false,
-              last_ping: nil,
               capabilities: MapSet.new(),
               capabilities_ok?: false,
               sasl_data: "",
@@ -64,13 +56,6 @@ defmodule Sencha.Handler do
   """
   def recv_privmsg(pid, source, message) do
     GenServer.cast(pid, {:recv_privmsg, source, message})
-  end
-
-  @doc """
-  Gets this socket's state variable.
-  """
-  def get_state(pid) do
-    GenServer.call(pid, :get_state)
   end
 
   # ===========================================================================
