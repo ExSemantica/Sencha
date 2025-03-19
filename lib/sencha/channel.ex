@@ -16,17 +16,19 @@ defmodule Sencha.Channel do
   @doc """
   Makes the specified username join
   """
-  def join(pid, user), do: GenServer.cast(pid, {:join, user})
+  def join(pid, user, socket_pid), do: GenServer.cast(pid, {:join, user, socket_pid})
 
   @doc """
   Makes the specified username part
   """
-  def part(pid, user, reason \\ nil), do: GenServer.cast(pid, {:part, user, reason})
+  def part(pid, user, socket_pid, reason \\ nil),
+    do: GenServer.cast(pid, {:part, user, socket_pid, reason})
 
   @doc """
   Makes the specified username talk
   """
-  def talk(pid, user, message), do: GenServer.cast(pid, {:talk, user, message})
+  def talk(pid, user, socket_pid, message),
+    do: GenServer.cast(pid, {:talk, user, socket_pid, message})
 
   @doc """
   Makes the specified username quit
@@ -54,7 +56,7 @@ defmodule Sencha.Channel do
          %{
            channel: "#" <> (info.aggregate |> String.downcase()),
            topic: info.description,
-           usernames: MapSet.new(),
+           users_sockets: %{},
            created: info.inserted_at |> DateTime.to_unix()
          }}
 
@@ -64,8 +66,101 @@ defmodule Sencha.Channel do
   end
 
   @impl true
-  def handle_cast({:join, user}, state) do
-    
+  def handle_call(:get_users, _from, state = %{users_sockets: users_sockets}) do
+    {:reply, {:ok, users_sockets}, state}
+  end
+
+  @impl true
+  def handle_cast(
+        {:join, user, socket_pid},
+        state = %{users_sockets: users_sockets, channel: channel_name}
+      )
+      when is_map_key(user, users_sockets) do
+    Sencha.Handler.on_already_present(socket_pid, channel_name)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast(
+        {:part, user, socket_pid, _reason},
+        state = %{users_sockets: users_sockets, channel: channel_name}
+      )
+      when not is_map_key(user, users_sockets) do
+    Sencha.Handler.on_not_present(socket_pid, channel_name)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast(
+        {:talk, user, socket_pid, _message},
+        state = %{users_sockets: users_sockets, channel: channel_name}
+      )
+      when not is_map_key(user, users_sockets) do
+    Sencha.Handler.on_not_present(socket_pid, channel_name)
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast(
+        {:join, user, socket_pid},
+        state = %{
+          users_sockets: users_sockets,
+          channel: channel_name,
+          topic: topic,
+          created: created
+        }
+      ) do
+    everyone = users_sockets |> Map.keys()
+    everyone = [user | everyone]
+    everyone = ["@Services" | everyone]
+
+    # Handle my own cast
+    Sencha.Handler.on_join(socket_pid, channel_name, everyone, {topic, created})
+    {:ok, hostmask} = Sencha.Handler.get_hostmask(socket_pid)
+
+    # Handle everyone else's cast
+    for {_other_user, other_socket_pid} <- users_sockets do
+      Sencha.Handler.on_join(other_socket_pid, channel_name, hostmask)
+    end
+
+    {:noreply, state |> put_in([:users_sockets, user], socket_pid)}
+  end
+
+  @impl true
+  def handle_cast(
+        {:part, user, socket_pid, reason},
+        state = %{users_sockets: users_sockets, channel: channel_name}
+      ) do
+    {:ok, hostmask} = Sencha.Handler.get_hostmask(socket_pid)
+
+    for {_other_user, other_socket_pid} <- users_sockets do
+      Sencha.Handler.on_part(other_socket_pid, channel_name, hostmask, reason)
+    end
+
+    {:noreply, state |> pop_in([:users_sockets, user])}
+  end
+
+  @impl true
+  def handle_cast(
+        {:talk, _user, socket_pid, message},
+        state = %{users_sockets: users_sockets, channel: channel_name}
+      ) do
+    {:ok, hostmask} = Sencha.Handler.get_hostmask(socket_pid)
+
+    for {_other_user, other_socket_pid} <- users_sockets do
+      Sencha.Handler.on_privmsg(other_socket_pid, channel_name, hostmask, message)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl true
+  def handle_cast(
+        {:quit, user},
+        state
+      ) do
+    # We already sent our quit messages from the User Pool
+    {:noreply, state |> pop_in([:users_sockets, user])}
   end
 
   # ===========================================================================

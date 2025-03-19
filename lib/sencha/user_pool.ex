@@ -10,6 +10,8 @@ defmodule Sencha.UserPool do
   # Ping timeout in milliseconds
   @ping_timeout @ping_interval + 5_000
 
+  @user_pool_terminated "Server error (user pool terminated)"
+
   use GenServer
   require Logger
 
@@ -19,6 +21,7 @@ defmodule Sencha.UserPool do
               socket_pid: nil,
               last_ping: DateTime.utc_now(:second),
               channels: MapSet.new()
+
   end
 
   @doc """
@@ -154,5 +157,28 @@ defmodule Sencha.UserPool do
            last_ping: DateTime.utc_now(:second)
        }
      end)}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    state
+    |> Enum.map(fn username, entry ->
+      quit(entry, username, @user_pool_terminated)
+      send(entry.socket_pid, {:disconnect, @user_pool_terminated})
+    end)
+
+    :ok
+  end
+  # ===========================================================================
+  # Private functions
+  # ===========================================================================
+  defp quit(entry = %Entry{channels: channels}, username, reason) do
+    channels |> Enum.map(fn channel_pid ->
+      Sencha.Channel.get_users(channel_pid)
+    end)
+    |> Enum.uniq()
+    |> Enum.map(fn other_user ->
+    end)
+    # Channel lookup
   end
 end

@@ -181,6 +181,19 @@ defmodule Sencha.Numerics do
       }
       |> Sencha.Message.encode()
     )
+end
+
+  def send(socket, 443, nickname: nickname, invitee: invitee, recipient: recipient) do
+    socket
+    |> ThousandIsland.Socket.send(
+      %Sencha.Message{
+        prefix: Sencha.ApplicationInfo.get_chat_hostname(),
+        command: "443",
+        params: [nickname, invitee, recipient],
+        trailing: "is already on channel"
+      }
+      |> Sencha.Message.encode()
+    )
   end
 
   def send(socket, 900, nickname: nickname, hostmask: hostmask) do
