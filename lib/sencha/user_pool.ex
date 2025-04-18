@@ -21,7 +21,6 @@ defmodule Sencha.UserPool do
               socket_pid: nil,
               last_ping: DateTime.utc_now(:second),
               channels: MapSet.new()
-
   end
 
   @doc """
@@ -35,35 +34,35 @@ defmodule Sencha.UserPool do
   Logs a username into the pool.
   """
   def log_in(user) do
-    GenServer.handle_call(__MODULE__, {:log_in, user})
+    GenServer.call(__MODULE__, {:log_in, user})
   end
 
   @doc """
   Gets this user's channels.
   """
   def get_channels(user) do
-    GenServer.handle_call(__MODULE__, {:get_channels, user})
+    GenServer.call(__MODULE__, {:get_channels, user})
   end
 
   @doc """
   Gets this user's socket PID.
   """
   def get_socket(user) do
-    GenServer.handle_call(__MODULE__, {:get_socket, user})
+    GenServer.call(__MODULE__, {:get_socket, user})
   end
 
   @doc """
   Logs a username out of the pool.
   """
   def log_out(user, reason) do
-    GenServer.handle_cast(__MODULE__, {:log_out, user, reason})
+    GenServer.cast(__MODULE__, {:log_out, user, reason})
   end
 
   @doc """
   Returns the pool usernames.
   """
   def all() do
-    GenServer.handle_call(__MODULE__, :all)
+    GenServer.call(__MODULE__, :all)
   end
 
   # ===========================================================================
@@ -115,8 +114,15 @@ defmodule Sencha.UserPool do
   @impl true
   def handle_cast({:log_out, user, reason}, state) when is_map_key(state, user) do
     Logger.debug("#{user} disconnects (#{reason})")
+    entry = state |> get_in([user])
 
-    {:noreply, state}
+    socket = entry.socket_pid
+    {:ok, hostmask} = Sencha.Handler.get_hostmask(socket)
+
+    quit(entry, hostmask, reason)
+    Sencha.Handler.on_disconnect(socket, reason)
+
+    {:noreply, state |> pop_in([user])}
   end
 
   @impl true
@@ -161,24 +167,29 @@ defmodule Sencha.UserPool do
 
   @impl true
   def terminate(_reason, state) do
-    state
-    |> Enum.map(fn username, entry ->
-      quit(entry, username, @user_pool_terminated)
-      send(entry.socket_pid, {:disconnect, @user_pool_terminated})
-    end)
+    for {username, entry} <- state do
+      log_out(username, @user_pool_terminated)
+    end
 
     :ok
   end
+
   # ===========================================================================
   # Private functions
   # ===========================================================================
-  defp quit(entry = %Entry{channels: channels}, username, reason) do
-    channels |> Enum.map(fn channel_pid ->
-      Sencha.Channel.get_users(channel_pid)
-    end)
-    |> Enum.uniq()
-    |> Enum.map(fn other_user ->
-    end)
-    # Channel lookup
+  defp quit(%Entry{channels: channels}, hostmask, reason) do
+    socket_pids =
+      channels
+      |> Enum.reduce(%{}, fn channel_pid, accumulator ->
+        Sencha.Channel.get_users(channel_pid)
+        |> Map.merge(accumulator)
+      end)
+      |> Map.values()
+
+    for socket_pid <- socket_pids do
+      Sencha.Handler.on_quit(socket_pid, hostmask, reason)
+    end
+
+    :ok
   end
 end

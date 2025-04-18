@@ -12,14 +12,11 @@ defmodule Sencha.Handler do
   # Note that USER isn't implemented here
   @timeout_auth 5_000
 
-  @regex_ctcp_action ~r/\x01ACTION (?<action>.+)\x01/
-
   defmodule UserState do
     defstruct requested_handle: nil,
               irc_state: :performing_authentication,
               timeout_timer: nil,
               authentication_timer: nil,
-              user_process: nil,
               ident: "~Sencha",
               vhost: nil,
               connected?: false,
@@ -35,6 +32,10 @@ defmodule Sencha.Handler do
   # Public calls
   # ===========================================================================
   def get_hostmask(pid), do: GenServer.call(pid, :get_hostmask)
+  def get_username(pid), do: GenServer.call(pid, :get_username)
+
+  def get_capabilities(pid), do: GenServer.call(pid, :get_capabilities)
+  def put_capabilities(pid, caps), do: GenServer.cast(pid, {:put_capabilities, caps})
 
   def on_disconnect(pid, reason), do: GenServer.cast(pid, {:disconnect, reason})
   def on_already_present(pid, channel), do: GenServer.cast(pid, {:already_present, channel})
@@ -51,6 +52,7 @@ defmodule Sencha.Handler do
   def on_privmsg(pid, source, hostmask, message),
     do: GenServer.cast(pid, {:privmsg, source, hostmask, message})
 
+  def on_quit(pid, hostmask, reason), do: GenServer.cast(pid, {:user_quit, hostmask, reason})
   # ===========================================================================
   # Initial connection
   # ===========================================================================
@@ -69,6 +71,32 @@ defmodule Sencha.Handler do
         {socket, state}
       ) do
     {:reply, {:ok, state |> UserState.get_hostmask()}, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_call(
+        :get_username,
+        _from,
+        {socket, state = %UserState{requested_handle: handle}}
+      ) do
+    {:reply, {:ok, handle}, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_call(
+        :get_capabilities,
+        _from,
+        {socket, state = %UserState{capabilities: caps}}
+      ) do
+    {:reply, {:ok, caps}, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:put_capabilities, caps},
+        {socket, state}
+      ) do
+    {:noreply, {socket, %UserState{state | capabilities: caps}}, socket.read_timeout}
   end
 
   @impl GenServer
@@ -209,16 +237,14 @@ defmodule Sencha.Handler do
     {:noreply, {socket, state}, socket.read_timeout}
   end
 
-  # ===========================================================================
-  # Message handling
-  # ===========================================================================
   @impl GenServer
-  def handle_info({:user_quit, other_socket_pid, reason}, {socket, state}) do
-    {:ok, hostmask} = __MODULE__.get_hostmask(other_socket_pid)
-
+  def handle_cast({:user_quit, hostmask, nil}, {socket, state}) do
     socket
     |> ThousandIsland.Socket.send(
-      %Sencha.Message{prefix: hostmask, command: "QUIT", trailing: reason}
+      %Sencha.Message{
+        prefix: hostmask,
+        command: "QUIT"
+      }
       |> Sencha.Message.encode()
     )
 
@@ -226,27 +252,26 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(
+  def handle_cast({:user_quit, hostmask, message}, {socket, state}) do
+    socket
+    |> ThousandIsland.Socket.send(
+      %Sencha.Message{
+        prefix: hostmask,
+        command: "QUIT",
+        trailing: message
+      }
+      |> Sencha.Message.encode()
+    )
+
+    {:noreply, {socket, state}, socket.read_timeout}
+  end
+
+  @impl GenServer
+  def handle_cast(
         {:capabilities_set, new},
         {socket, state = %UserState{capabilities: old, requested_handle: handle}}
       ) do
     nick = handle || "*"
-
-    # Disable these IRCv3 extensions
-    disabled =
-      new
-      |> Enum.filter(&(String.first(&1) == "-"))
-      |> Enum.map(&String.replace_prefix(&1, "-", ""))
-      |> MapSet.new()
-
-    # Enable these ones and join them with the old set of IRCv3 extensions when 
-    # initially enabled
-    capabilities =
-      new
-      |> Enum.filter(&(String.first(&1) != "-"))
-      |> MapSet.new()
-      |> MapSet.union(old)
-      |> MapSet.difference(disabled)
 
     supported = capabilities |> MapSet.intersection(__MODULE__.Cap.get_supported())
 
@@ -283,7 +308,7 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(:capabilities_info, {socket, state = %UserState{requested_handle: handle}}) do
+  def handle_cast(:capabilities_info, {socket, state = %UserState{requested_handle: handle}}) do
     nick = handle || "*"
 
     socket
@@ -301,7 +326,7 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(
+  def handle_cast(
         {:capabilities_invalid, invalid},
         {socket, state = %UserState{requested_handle: handle}}
       ) do
@@ -311,61 +336,48 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(
+  def handle_cast(
         :capabilities_ok,
         {socket, state = %UserState{requested_handle: handle, irc_state: :wait_for_cap_end}}
       ) do
     # IRC will connect since the capabilities handshake ended
     # This happens based on IRCv3 SASL and CAP specs
-    case Sencha.User.start_link(socket: self(), handle: handle) do
-      {:ok, user_pid} ->
-        Logger.debug("#{handle} connects")
-        Sencha.UserPool.insert(handle)
+    case Sencha.UserPool.log_in(handle) do
+      :ok ->
+        state = %UserState{
+          state
+          | irc_state: :connected,
+            connected?: true,
+            vhost: "user/" <> handle
+        }
 
-        {:noreply,
-         {socket,
-          %UserState{
-            state
-            | irc_state: :connected,
-              connected?: true,
-              user_process: user_pid,
-              vhost: "user/" <> handle
-          }}
-         |> Sencha.Welcome.send_burst(), :infinity}
+        socket |> Sencha.Numerics.send_welcome(nickname: handle)
+
+        {:noreply, {socket, state}, :infinity}
 
       {:error, {:already_started, _}} ->
         socket |> Sencha.Numerics.send(433, nickname: handle)
+        on_disconnect(self(), "Account already in use")
 
-        {:noreply, {socket, state} |> quit("Account already in use"), socket.read_timeout}
+        {:noreply, {socket, state}, socket.read_timeout}
     end
   end
 
   @impl GenServer
-  def handle_info(:capabilities_ok, {socket, state}) do
+  def handle_cast(:capabilities_ok, {socket, state}) do
     {:noreply, {socket, %UserState{state | irc_state: :connected}}, socket.read_timeout}
   end
 
-  def handle_info(:too_many, {socket, state = %UserState{requested_handle: handle}}) do
+  @impl GenServer
+  def handle_cast(:too_many_recipients, {socket, state = %UserState{requested_handle: handle}}) do
     socket |> Sencha.Numerics.send(407, nickname: handle)
 
     {:noreply, {socket, state}, socket.read_timeout}
   end
 
-  @impl GenServer
-  def handle_info({:message_these, recipients, message}, {socket, state}) do
-    {:noreply, {socket, state} |> direct_message(recipients, message), socket.read_timeout}
-  end
-
-  @impl GenServer
-  def handle_info({:join_these, recipients}, {socket, state}) do
-    {:noreply, {socket, state} |> join(recipients), socket.read_timeout}
-  end
-
-  @impl GenServer
-  def handle_info({:part_these, recipients, reason}, {socket, state}) do
-    {:noreply, {socket, state} |> part(recipients, reason), socket.read_timeout}
-  end
-
+  # ===========================================================================
+  # Message handling
+  # ===========================================================================
   @impl GenServer
   def handle_info({:irc_message, message = %Sencha.Message{command: command}}, {socket, state}) do
     case command do
@@ -461,12 +473,12 @@ defmodule Sencha.Handler do
 
       "QUIT" when is_nil(message.trailing) ->
         Logger.debug("Quit", socket_pid: self())
-        {socket, state} |> quit("Quit")
+        Sencha.UserPool.log_out(state.requested_handle, "Quit")
         {:noreply, {socket, state}, socket.read_timeout}
 
       "QUIT" ->
         Logger.debug("Quit (#{message.trailing})", socket_pid: self())
-        {socket, state} |> quit("Quit: " <> message.trailing)
+        Sencha.UserPool.log_out(state.requested_handle, "Quit: #{message.trailing}")
         {:noreply, {socket, state}, socket.read_timeout}
 
       _message ->
@@ -492,53 +504,32 @@ defmodule Sencha.Handler do
   # Termination handling
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_timeout(socket, state) do
-    {socket, state} |> quit("Authentication timeout")
+  def handle_timeout(_socket, _state) do
+    on_disconnect(self(), "Authentication timeout")
 
     :ok
   end
 
   @impl ThousandIsland.Handler
-  def handle_close(_socket, %UserState{user_process: nil}), do: :ok
-
-  @impl ThousandIsland.Handler
-  def handle_close(socket, state = %UserState{user_process: user_process}) do
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, state) do
-    {socket, state} |> quit("Server initiated disconnect")
-
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_shutdown(socket, state) do
-    {socket, state} |> quit("Server is shutting down")
-
-    :ok
-  end
-
-  def quit({socket, state = %UserState{user_process: user_process}}, reason) do
-    if not is_nil(user_process) and Process.alive?(user_process) do
-      Sencha.User.set_quit_reason(user_process, reason)
+  def handle_error(_reason, _socket, %UserState{requested_handle: handle}) do
+    if is_nil(handle) do
+      on_disconnect(self(), "Server error")
+    else
+      Sencha.UserPool.log_out(handle, "Server error")
     end
 
-    # Notify the client of the connection termination
-    socket
-    |> ThousandIsland.Socket.send(
-      %Sencha.Message{command: "ERROR", trailing: reason}
-      |> Sencha.Message.encode()
-    )
+    :ok
+  end
 
-    # Close the client socket, the handle_close callback will wipe the socket
-    # from the User Supervisor
-    socket |> ThousandIsland.Socket.shutdown(:read_write)
-    socket |> ThousandIsland.Socket.close()
+  @impl ThousandIsland.Handler
+  def handle_shutdown(_socket, %UserState{requested_handle: handle}) do
+    if is_nil(handle) do
+      on_disconnect(self(), "Server shutting down")
+    else
+      Sencha.UserPool.log_out(handle, "Server shutting down")
+    end
 
-    # NOTE: Will this cause lingering states?
-    {socket, state}
+    :ok
   end
 
   # ===========================================================================
@@ -558,8 +549,6 @@ defmodule Sencha.Handler do
       {:ok, %{username: handle}} ->
         Logger.debug("#{handle} logs in", socket_pid: self())
 
-        host = Sencha.ApplicationInfo.get_chat_hostname()
-
         new_state = %Sencha.Handler.UserState{
           state
           | requested_handle: handle,
@@ -568,40 +557,22 @@ defmodule Sencha.Handler do
             sasl_data: :redacted
         }
 
-        burst = [
-          %Sencha.Message{
-            prefix: host,
-            command: "900",
-            params: [handle, new_state |> Sencha.Handler.UserState.get_host_mask(), handle],
-            trailing: "You are now logged in as #{handle}"
-          },
-          %Sencha.Message{
-            prefix: host,
-            command: "903",
-            params: [handle],
-            trailing: "SASL authentication successful"
-          }
-        ]
+        socket
+        |> Sencha.Numerics.send(900,
+          nickname: handle,
+          hostmask: new_state |> UserState.get_hostmask()
+        )
 
-        for b <- burst do
-          socket |> ThousandIsland.Socket.send(b |> Sencha.Message.encode())
-        end
+        socket
+        |> Sencha.Numerics.send(903, nickname: handle)
 
-        {:noreply, {socket, new_state}, :infinity}
+        {:noreply, {socket, new_state}, socket.read_timeout}
 
       {:error, error} ->
         Logger.debug("Client fails to authenticate: #{inspect(error)}", socket_pid: self())
 
         socket
-        |> ThousandIsland.Socket.send(
-          %Sencha.Message{
-            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-            command: "904",
-            params: ["*"],
-            trailing: "SASL authentication failed"
-          }
-          |> Sencha.Message.encode()
-        )
+        |> Sencha.Numerics.send(904, [])
 
         {:noreply, {socket, state}, socket.read_timeout}
     end
@@ -627,125 +598,6 @@ defmodule Sencha.Handler do
         5000 ->
           {:error, :gateway_timeout}
       end
-    end
-  end
-
-  defp direct_message({socket, state}, [], _message) do
-    {socket, state}
-  end
-
-  defp direct_message(
-         {socket, state = %UserState{requested_handle: handle}},
-         [recipient | recipients],
-         message
-       ) do
-    if recipient |> String.starts_with?("#") do
-      case Registry.lookup(Sencha.ChannelRegistry, recipient) do
-        [{pid, _}] ->
-          Sencha.Channel.talk(pid, {socket, state}, message)
-          format_message(recipient, handle, message)
-
-        [] ->
-          socket
-          |> ThousandIsland.Socket.send(
-            %Sencha.Message{
-              prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-              command: "403",
-              params: [handle, recipient],
-              trailing: "No such aggregate"
-            }
-            |> Sencha.Message.encode()
-          )
-      end
-    else
-      case Registry.lookup(Sencha.UserRegistry, recipient) do
-        [{pid, _}] ->
-          Sencha.User.send(pid, {socket, state}, message)
-          format_message(recipient, handle, message)
-
-        [] ->
-          socket
-          |> ThousandIsland.Socket.send(
-            %Sencha.Message{
-              prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-              command: "401",
-              params: [handle, recipient],
-              trailing: "No such user"
-            }
-            |> Sencha.Message.encode()
-          )
-      end
-    end
-
-    direct_message({socket, state}, recipients, message)
-  end
-
-  defp join({socket, state}, []) do
-    {socket, state}
-  end
-
-  defp join({socket, state = %UserState{requested_handle: handle}}, [recipient | recipients]) do
-    case Sencha.ChannelSupervisor.start_child(recipient) do
-      {:ok, pid} ->
-        Logger.debug("#{handle} joins channel #{recipient}", socket_pid: self())
-        Sencha.Channel.join(pid, {socket, state})
-
-      {:error, {:already_started, pid}} ->
-        Logger.debug("#{handle} joins channel #{recipient}", socket_pid: self())
-        Sencha.Channel.join(pid, {socket, state})
-
-      {:error, :no_such_item} ->
-        socket
-        |> ThousandIsland.Socket.send(
-          %Sencha.Message{
-            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-            command: "403",
-            params: [handle, recipient],
-            trailing: "No such aggregate"
-          }
-          |> Sencha.Message.encode()
-        )
-    end
-
-    join({socket, state}, recipients)
-  end
-
-  defp part({socket, state}, [], _reason) do
-    {socket, state}
-  end
-
-  defp part(
-         {socket, state = %UserState{requested_handle: handle}},
-         [recipient | recipients],
-         reason
-       ) do
-    case Registry.lookup(Sencha.ChannelRegistry, recipient) do
-      [{pid, _}] ->
-        Logger.debug("#{handle} leaves channel #{recipient} (#{reason})")
-        Sencha.Channel.part(pid, {socket, state}, reason)
-
-      [] ->
-        socket
-        |> ThousandIsland.Socket.send(
-          %Sencha.Message{
-            prefix: Sencha.ApplicationInfo.get_chat_hostname(),
-            command: "403",
-            params: [handle, recipient],
-            trailing: "No such aggregate"
-          }
-          |> Sencha.Message.encode()
-        )
-    end
-
-    part({socket, state}, recipients, reason)
-  end
-
-  defp format_message(recipient, handle, message) do
-    if message =~ @regex_ctcp_action do
-      converted = Regex.named_captures(@regex_ctcp_action, message)
-      Logger.debug("[#{recipient}] * #{handle} #{converted["action"]}", socket_pid: self())
-    else
-      Logger.debug("[#{recipient}] <#{handle}> #{message}", socket_pid: self())
     end
   end
 end
