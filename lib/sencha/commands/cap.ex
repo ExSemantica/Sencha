@@ -1,4 +1,7 @@
 defmodule Sencha.Commands.Cap do
+  @moduledoc """
+  Handle 'CAP' IRCv3 commands
+  """
   def handle_irc(
         pid,
         packet = %Sencha.Message{params: ["REQ" | rest], trailing: nil},

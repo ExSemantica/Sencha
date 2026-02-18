@@ -13,6 +13,9 @@ defmodule Sencha.Handler.UserState do
   - `:nickname`: The user's IRC nickname.
   - `:capabilities`: A `MapSet` representing IRCv3 capabilities in use.
   - `:timeout_auth`: Kills the client when it doesn't authenticate on time.
+  - `:timeout_ping`: Waits to send a ping.
+  - `:timeout_ping_hard`: Kills the client when it doesn't ping on time.
+  - `:last_ping_from_server`: When was the last ping sent?
   """
   @enforce_keys ~w(authentication_data authentication_state capabilities)a
   defstruct [
@@ -20,7 +23,10 @@ defmodule Sencha.Handler.UserState do
     :authentication_state,
     :nickname,
     :capabilities,
-    :timeout_auth
+    :timeout_auth,
+    :timeout_ping,
+    :timeout_ping_hard,
+    :last_ping_from_server
   ]
 
   @doc """

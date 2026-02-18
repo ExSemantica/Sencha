@@ -35,6 +35,11 @@ defmodule Sencha.Handler do
   """
   def authentication_put(pid, data), do: GenServer.cast(pid, {:authentication_put, data})
 
+  @doc """
+  Handles resetting timers for PING.
+  """
+  def receive_ping(pid), do: GenServer.cast(pid, :receive_ping)
+
   # ===========================================================================
   # GenServer callbacks
   # ===========================================================================
@@ -149,11 +154,42 @@ defmodule Sencha.Handler do
            timeout_auth: timeout
          }}
       ) do
-    # TODO: add welcome burst
     Process.cancel_timer(timeout)
+    :ok = __MODULE__.Welcome.do_burst({socket, state})
 
     {:noreply,
-     {socket, %__MODULE__.UserState{state | authentication_state: :ok, timeout_auth: nil}}}
+     {socket,
+      %__MODULE__.UserState{
+        state
+        | authentication_state: :ok,
+          timeout_auth: nil,
+          last_ping_from_server: DateTime.utc_now(:second),
+          timeout_ping:
+            Process.send_after(
+              self(),
+              :timeout_ping,
+              Application.fetch_env!(:sencha, :ping_timeout)
+            )
+      }}}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        :receive_ping,
+        {socket, state = %__MODULE__.UserState{}}
+      ) do
+    {:noreply,
+     {socket,
+      %__MODULE__.UserState{
+        state
+        | last_ping_from_server: DateTime.utc_now(:second),
+          timeout_ping:
+            Process.send_after(
+              self(),
+              :timeout_ping,
+              Application.fetch_env!(:sencha, :ping_timeout)
+            )
+      }}}
   end
 
   @impl GenServer
@@ -249,6 +285,33 @@ defmodule Sencha.Handler do
 
   @impl GenServer
   def handle_info(
+        {:irc, packet = %Sencha.Message{command: "PING"}},
+        {socket, state}
+      ) do
+    Sencha.Commands.Ping.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(
+        {:irc, packet = %Sencha.Message{command: "PONG"}},
+        {socket, state}
+      ) do
+    Sencha.Commands.Pong.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "MOTD"}}, {socket, state}) do
+    Sencha.Commands.Motd.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}
       ) do
@@ -279,6 +342,40 @@ defmodule Sencha.Handler do
     |> perform_close("Authentication timed out")
 
     {:stop, :normal, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(:timeout_ping, {socket, state = %__MODULE__.UserState{}}) do
+    socket
+    |> ThousandIsland.Socket.send(
+      Sencha.Message.encode(%Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "PING",
+        trailing: Application.fetch_env!(:sencha, :host)
+      })
+    )
+
+    hard =
+      Process.send_after(
+        self(),
+        :timeout_ping_hard,
+        Application.fetch_env!(:sencha, :ping_timeout_hard)
+      )
+
+    {:noreply, {socket, %__MODULE__.UserState{state | timeout_ping_hard: hard}}}
+  end
+
+  @impl GenServer
+  def handle_info(
+        :timeout_ping_hard,
+        {socket, state = %__MODULE__.UserState{last_ping_from_server: t0}}
+      ) do
+    t1 = DateTime.utc_now(:second)
+
+    socket
+    |> perform_close("Ping timeout (#{DateTime.diff(t1, t0)} seconds)")
+
+    {:noreply, {socket, state}}
   end
 
   # ===========================================================================
@@ -312,6 +409,7 @@ defmodule Sencha.Handler do
     socket
     |> ThousandIsland.Socket.send(
       Sencha.Message.encode(%Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
         command: "ERROR",
         trailing: "Closing Link: #{Application.fetch_env!(:sencha, :host)} (#{reason})"
       })

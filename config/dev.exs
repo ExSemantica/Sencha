@@ -1,7 +1,9 @@
 import Config
 
-# Timeout for authentication in milliseconds
+# Timeouts are in milliseconds
 config :sencha, auth_timeout: 15_000
+config :sencha, ping_timeout: 15_000
+config :sencha, ping_timeout_hard: 5_000
 
 config :sencha, Sencha.Repo,
   adapter: Ecto.Adapters.SQLite3,

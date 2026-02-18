@@ -1,4 +1,7 @@
 defmodule Sencha.Commands.Authenticate do
+  @moduledoc """
+  Handle 'AUTHENTICATE' IRCv3 commands
+  """
   def handle_irc(
         _pid,
         _packet,

@@ -14,6 +14,8 @@ defmodule Sencha.Application do
       Sencha.Repo
     ]
 
+    :persistent_term.put(Sencha.Application.Started, DateTime.utc_now(:second))
+
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Sencha.Supervisor]
