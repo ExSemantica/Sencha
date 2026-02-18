@@ -10,6 +10,8 @@ defmodule Sencha.Application do
     children = [
       # Starts a worker by calling: Sencha.Worker.start_link(arg)
       # {Sencha.Worker, arg}
+      {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
+      Sencha.Repo
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
