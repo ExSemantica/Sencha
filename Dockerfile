@@ -36,11 +36,7 @@ COPY priv priv
 
 COPY lib lib
 
-COPY assets assets# Compile the release
 RUN mix compile
-
-# Changes to config/runtime.exs don't require recompiling the code
-COPY config/runtime.exs config/
 
 COPY rel rel
 RUN mix release
@@ -68,7 +64,6 @@ ENV MIX_ENV="prod"
 
 # Only copy the final release from the build stage
 COPY --from=builder /app/_build/${MIX_ENV}/rel/sencha ./
-
 
 # If using an environment that doesn't automatically reap zombie processes, it is
 # advised to add an init process such as tini via `apt-get install`
