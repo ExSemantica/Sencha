@@ -36,10 +36,9 @@ defmodule Sencha.Handler do
   def authentication_put(pid, data), do: GenServer.cast(pid, {:authentication_put, data})
 
   @doc """
-  Handles resetting timers for PING.
+  Sends an encoded IRC message to this user.
   """
-  def receive_ping(pid), do: GenServer.cast(pid, :receive_ping)
-
+  def send_message(pid, message), do: GenServer.cast(pid, {:send_message, message})
   # ===========================================================================
   # GenServer callbacks
   # ===========================================================================
@@ -51,6 +50,14 @@ defmodule Sencha.Handler do
 
     # Stop this client process
     {:stop, :normal, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_cast({:send_message, message}, {socket, state}) do
+    socket
+    |> ThousandIsland.Socket.send(message |> Sencha.Message.encode())
+
+    {:noreply, {socket, state}}
   end
 
   @impl GenServer
@@ -151,45 +158,40 @@ defmodule Sencha.Handler do
         {socket,
          state = %__MODULE__.UserState{
            authentication_state: :waiting_for_capabilities,
-           timeout_auth: timeout
+           timeout_auth: timeout,
+           rdns_host: rdns_host,
+           nickname: nickname
          }}
       ) do
+    state = %__MODULE__.UserState{state | authentication_state: :ok}
+
     Process.cancel_timer(timeout)
-    :ok = __MODULE__.Welcome.do_burst({socket, state})
 
-    {:noreply,
-     {socket,
-      %__MODULE__.UserState{
-        state
-        | authentication_state: :ok,
-          timeout_auth: nil,
-          last_ping_from_server: DateTime.utc_now(:second),
-          timeout_ping:
-            Process.send_after(
-              self(),
-              :timeout_ping,
-              Application.fetch_env!(:sencha, :ping_timeout)
-            )
-      }}}
-  end
+    child =
+      Sencha.User.Supervisor.start_child(%{
+        handler_process: self(),
+        rdns_host: rdns_host,
+        nickname: nickname
+      })
 
-  @impl GenServer
-  def handle_cast(
-        :receive_ping,
-        {socket, state = %__MODULE__.UserState{}}
-      ) do
-    {:noreply,
-     {socket,
-      %__MODULE__.UserState{
-        state
-        | last_ping_from_server: DateTime.utc_now(:second),
-          timeout_ping:
-            Process.send_after(
-              self(),
-              :timeout_ping,
-              Application.fetch_env!(:sencha, :ping_timeout)
-            )
-      }}}
+    case child do
+      {:ok, pid} ->
+        Process.link(pid)
+
+        {:noreply, {socket, %__MODULE__.UserState{state | user_process: pid}}}
+
+      {:error, {:already_started, _pid}} ->
+        socket
+        |> perform_close("Account already in use")
+
+        {:noreply, {socket, state}}
+
+      {:error, :max_children} ->
+        socket
+        |> perform_close("Too many connections on this server")
+
+        {:noreply, {socket, state}}
+    end
   end
 
   @impl GenServer
@@ -208,8 +210,7 @@ defmodule Sencha.Handler do
         decoded |> check_user_here({socket, state})
 
       {:continue, partial} ->
-        {:noreply, {socket, %__MODULE__.UserState{state | authentication_data: partial}},
-         socket.read_timeout}
+        {:noreply, {socket, %__MODULE__.UserState{state | authentication_data: partial}}}
 
       {:error, :too_long} ->
         socket
@@ -240,8 +241,7 @@ defmodule Sencha.Handler do
           })
         )
 
-        {:noreply, {socket, %__MODULE__.UserState{state | authentication_data: []}},
-         socket.read_timeout}
+        {:noreply, {socket, %__MODULE__.UserState{state | authentication_data: []}}}
     end
   end
 
@@ -249,8 +249,71 @@ defmodule Sencha.Handler do
   # Connection is initialized
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_connection(_socket, _state) do
-    {:continue, __MODULE__.UserState.init(), :infinity}
+  def handle_connection(socket, _state) do
+    {:ok, {peer, _port}} = ThousandIsland.Socket.peername(socket)
+
+    socket
+    |> ThousandIsland.Socket.send(
+      Sencha.Message.encode(%Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "NOTICE",
+        params: ["*"],
+        trailing: "Getting your hostname"
+      })
+    )
+
+    task = Task.async(fn -> __MODULE__.LookupRDNS.lookup(peer) end)
+
+    host =
+      case Task.await(task) do
+        {_, result} when result != :error ->
+          result
+
+        _ ->
+          socket
+          |> ThousandIsland.Socket.send(
+            Sencha.Message.encode(%Sencha.Message{
+              prefix: Application.fetch_env!(:sencha, :host),
+              command: "NOTICE",
+              params: ["*"],
+              trailing: "Could not get your hostname, using your IP address instead"
+            })
+          )
+
+          :inet.ntoa(peer) |> to_string
+      end
+
+    socket
+    |> ThousandIsland.Socket.send(
+      Sencha.Message.encode(%Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "NOTICE",
+        params: ["*"],
+        trailing: "Your probed hostname or IP address is #{host}"
+      })
+    )
+
+    kline =
+      :persistent_term.get(Sencha.KLines, [])
+      |> Enum.filter(fn kline ->
+        {cidr, _reason} = kline
+
+        InetCidr.contains?(cidr, peer)
+      end)
+
+    case kline do
+      [] ->
+        :ok
+
+      kline ->
+        # first k-line takes precedence because that is Elixir's happy path
+        {_, reason} = hd(kline)
+        socket |> perform_close("K-Lined (#{reason})")
+
+        :ok
+    end
+
+    {:continue, %__MODULE__.UserState{__MODULE__.UserState.init() | rdns_host: host}, :infinity}
   end
 
   # ===========================================================================
@@ -311,6 +374,27 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "OPER"}}, {socket, state}) do
+    Sencha.Commands.Oper.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "REHASH"}}, {socket, state}) do
+    Sencha.Commands.Rehash.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "SQUIT"}}, {socket, state}) do
+    Sencha.Commands.Squit.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
   def handle_info(
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}
@@ -339,42 +423,13 @@ defmodule Sencha.Handler do
   @impl GenServer
   def handle_info(:timeout_auth, {socket, state}) do
     socket
-    |> perform_close("Authentication timed out")
+    |> perform_close("Authentication timeout")
 
     {:stop, :normal, {socket, state}}
   end
 
   @impl GenServer
-  def handle_info(:timeout_ping, {socket, state = %__MODULE__.UserState{}}) do
-    socket
-    |> ThousandIsland.Socket.send(
-      Sencha.Message.encode(%Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :host),
-        command: "PING",
-        trailing: Application.fetch_env!(:sencha, :host)
-      })
-    )
-
-    hard =
-      Process.send_after(
-        self(),
-        :timeout_ping_hard,
-        Application.fetch_env!(:sencha, :ping_timeout_hard)
-      )
-
-    {:noreply, {socket, %__MODULE__.UserState{state | timeout_ping_hard: hard}}}
-  end
-
-  @impl GenServer
-  def handle_info(
-        :timeout_ping_hard,
-        {socket, state = %__MODULE__.UserState{last_ping_from_server: t0}}
-      ) do
-    t1 = DateTime.utc_now(:second)
-
-    socket
-    |> perform_close("Ping timeout (#{DateTime.diff(t1, t0)} seconds)")
-
+  def handle_info({:EXIT, _what, _reason}, {socket, state}) do
     {:noreply, {socket, state}}
   end
 
@@ -465,15 +520,28 @@ defmodule Sencha.Handler do
     |> check_locked_here({socket, state})
   end
 
-  defp check_locked_here({:ok, user}, {socket, state = %__MODULE__.UserState{}}) do
+  defp check_locked_here(
+         {:ok, user},
+         {socket,
+          state = %__MODULE__.UserState{
+            rdns_host: rdns_host
+          }}
+       ) do
     case __MODULE__.Authenticate.check_locked(user) do
       {:ok, %Sencha.Repo.User{nickname: nickname}} ->
+        state = %__MODULE__.UserState{
+          state
+          | authentication_data: [],
+            authentication_state: :waiting_for_capabilities,
+            nickname: nickname
+        }
+
         socket
         |> ThousandIsland.Socket.send(
           Sencha.Message.encode(%Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :host),
             command: "900",
-            params: [nickname, nickname |> __MODULE__.UserState.hostmask(), nickname],
+            params: [nickname, "#{nickname}!~Sencha@#{rdns_host}", nickname],
             trailing: "You are now logged in as " <> nickname
           })
         )
@@ -488,14 +556,7 @@ defmodule Sencha.Handler do
           })
         )
 
-        {:noreply,
-         {socket,
-          %__MODULE__.UserState{
-            state
-            | authentication_data: [],
-              authentication_state: :waiting_for_capabilities,
-              nickname: nickname
-          }}}
+        {:noreply, {socket, state}}
 
       {:error, {:locked, %Sencha.Repo.User{nickname: nickname, locked_reason: reason}}} ->
         socket

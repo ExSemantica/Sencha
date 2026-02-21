@@ -1,0 +1,10 @@
+  ____             __       
+  / __/__ ___  ____/ /  ___ _
+ _\ \/ -_) _ \/ __/ _ \/ _ `/
+/___/\__/_//_/\__/_//_/\_,_/ 
+
+Sencha is a type of loose-leaf Japanese green tea.
+The tea is then infused in hot water.
+
+This is the default MOTD for Sencha ircd.                             
+The IRC operator(s) should change this.

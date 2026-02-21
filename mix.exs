@@ -36,7 +36,14 @@ defmodule Sencha.MixProject do
       {:ecto_sqlite3, "~> 0.22"},
 
       # Authentication provider locally (only for the local SQLite database)
-      {:argon2_elixir, "~> 4.1"}
+      {:argon2_elixir, "~> 4.1"},
+
+      # Easily implement K-lines
+      {:inet_cidr, "~> 1.0"},
+
+      # Operators should use TOTP before doing significant actions
+      {:nimble_totp, "~> 1.0"},
+      {:eqrcode, "~> 0.2"}
 
       # {:dep_from_hexpm, "~> 0.3.0"},
       # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}

@@ -11,10 +11,14 @@ defmodule Sencha.Application do
       # Starts a worker by calling: Sencha.Worker.start_link(arg)
       # {Sencha.Worker, arg}
       {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
-      Sencha.Repo
+      Sencha.Repo,
+      Sencha.User.Supervisor
     ]
 
+    # This should not be rehashable
     :persistent_term.put(Sencha.Application.Started, DateTime.utc_now(:second))
+
+    Sencha.rehash()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options

@@ -3,15 +3,13 @@ defmodule Sencha.Commands.Pong do
   Handle 'PONG' IRCv3 commands
   """
   def handle_irc(
-        pid,
+        _pid,
         _packet = %Sencha.Message{trailing: server},
-        {_socket, _state = %Sencha.Handler.UserState{authentication_state: :ok, timeout_ping: ping, timeout_ping_hard: hard}}
+        {_socket,
+         _state = %Sencha.Handler.UserState{authentication_state: :ok, user_process: user}}
       ) do
     if server == Application.fetch_env!(:sencha, :host) do
-      Process.cancel_timer(ping)
-      Process.cancel_timer(hard)
-
-      :ok = Sencha.Handler.receive_ping(pid)
+      Sencha.User.receive_ping(user)
     end
 
     :ok

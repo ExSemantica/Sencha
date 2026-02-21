@@ -9,6 +9,9 @@ defmodule Sencha.Repo.User do
     field(:nickname, :string)
     field(:password, :string, redact: true)
 
+    field(:operator, :boolean, default: false)
+    field(:operator_secret, :binary, default: <<>>, redact: true)
+
     field(:locked, :boolean, default: false)
     field(:locked_reason, :string)
 
@@ -17,7 +20,7 @@ defmodule Sencha.Repo.User do
 
   def changeset(user, attrs) do
     user
-    |> cast(attrs, [:nickname, :password, :locked, :locked_reason])
+    |> cast(attrs, [:nickname, :password, :operator, :operator_secret, :locked, :locked_reason])
     |> validate_required([:nickname, :password])
     |> validate_exclusion(:nickname, ~w(Services), message: "must not impose bot nicknames")
     |> validate_length(:nickname, min: 1, max: max_nickname_length())

@@ -5,6 +5,8 @@ defmodule Sencha.Repo.Migrations.AddUsers do
     create table "users" do
       add :nickname, :string
       add :password, :string
+      add :operator, :boolean
+      add :operator_secret, :binary
       add :locked, :boolean
       add :locked_reason, :string
 
