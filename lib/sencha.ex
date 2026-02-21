@@ -34,7 +34,7 @@ defmodule Sencha do
         Logger.warning("Could not rehash MOTD at '#{motd_path}'")
     end
 
-    klines_path = Path.join(["priv", "klines.txt"])
+    klines_path = Path.join(["data", "klines.txt"])
 
     case :file.consult(klines_path) do
       {:ok, klines} ->
