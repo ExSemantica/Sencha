@@ -11,11 +11,11 @@
 
 ### MOTD
 
-The `priv/motd.txt` file can be used to give a LF-terminated MOTD.
+The `data/motd.txt` file can be used to give a LF-terminated MOTD.
 
 ### K-lines
 
-The `priv/klines.txt` file is an Erlang terms list, which allows you to K-Line
+The `data/klines.txt` file is an Erlang terms list, which allows you to K-Line
 by Erlang `:file.consult` term files.
 
 Make sure the terms are binaries. You specify a CIDR range as the first tuple

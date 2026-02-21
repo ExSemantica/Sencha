@@ -18,7 +18,7 @@ defmodule Sencha do
   end
 
   def rehash do
-    motd_path = Application.app_dir(:sencha, ["priv", "motd.txt"])
+    motd_path = Path.join(["data", "motd.txt"])
 
     case File.read(motd_path) do
       {:ok, motd} ->
@@ -34,7 +34,7 @@ defmodule Sencha do
         Logger.warning("Could not rehash MOTD at '#{motd_path}'")
     end
 
-    klines_path = Application.app_dir(:sencha, ["priv", "klines.txt"])
+    klines_path = Path.join(["priv", "klines.txt"])
 
     case :file.consult(klines_path) do
       {:ok, klines} ->
