@@ -11,7 +11,7 @@ defmodule Sencha.User.Modes do
   @doc """
   Lists grantable (/MODE) user modes.
   """
-  defguard grantable() when [?r, ?w]
+  defguard grantable() when [?w]
 
   @doc """
   Convenience for formatting modes
