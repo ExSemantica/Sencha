@@ -1,8 +1,6 @@
 defmodule Sencha.Channel.Modes do
   @moduledoc """
-  Conveniences for handling channel modes.
-
-  TODO: Finish this
+  Conveniences for parsing channel modes.
   """
 
   @doc """
@@ -118,18 +116,18 @@ defmodule Sencha.Channel.Modes do
       mode in supported_non_parameters() ->
         parse_one(put_in(modemap, [mode], true), modes_left, modeparams, :add)
 
-      mode in supported_integer_parameters() ->
+      mode in supported_integer_parameters() and modeparams != []  ->
         [param | modeparams] = modeparams
         {integer, _} = Integer.parse(param)
 
         parse_one(put_in(modemap, [mode], integer), modes_left, modeparams, :add)
 
-      mode in supported_string_parameters() ->
+      mode in supported_string_parameters() and modeparams != [] ->
         [param | modeparams] = modeparams
 
         parse_one(put_in(modemap, [mode], param), modes_left, modeparams, :add)
 
-      mode in supported_mapset_parameters() ->
+      mode in supported_mapset_parameters() and modeparams != [] ->
         [param | modeparams] = modeparams
 
         old = get_in(modemap, [mode])
@@ -153,7 +151,7 @@ defmodule Sencha.Channel.Modes do
       mode in supported_string_parameters() ->
         parse_one(put_in(modemap, [mode], ""), modes_left, modeparams, :remove)
 
-      mode in supported_mapset_parameters() ->
+      mode in supported_mapset_parameters() and modeparams != [] ->
         [param | modeparams] = modeparams
 
         old = get_in(modemap, [mode])

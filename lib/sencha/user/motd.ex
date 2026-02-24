@@ -22,15 +22,14 @@ defmodule Sencha.User.MOTD do
           trailing: "-- Message of the Day --"
         })
 
-        motd
-        |> Enum.map(fn line ->
+        for line <- motd do
           Sencha.Handler.send_message(handler, %Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :host),
             command: "375",
             params: [nick],
             trailing: line
           })
-        end)
+        end
 
         Sencha.Handler.send_message(handler, %Sencha.Message{
           prefix: Application.fetch_env!(:sencha, :host),

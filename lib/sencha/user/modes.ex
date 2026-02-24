@@ -29,6 +29,18 @@ defmodule Sencha.User.Modes do
   def defaults(), do: MapSet.new([?r, ?w])
 
   @doc """
+  Remove what isn't a grantable mode
+  """
+  def get_grantables(modes),
+    do: MapSet.intersection(MapSet.new(modes), MapSet.new(grantable()))
+
+  @doc """
+  Remove what is an existant mode
+  """
+  def get_nonexistants(modes),
+    do: MapSet.difference(MapSet.new(modes), MapSet.new(supported()))
+
+  @doc """
   Sends modes to this client
   """
   def send_to_client(

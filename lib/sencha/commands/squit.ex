@@ -16,7 +16,7 @@ defmodule Sencha.Commands.Squit do
     ustate = Sencha.User.get_state(user)
 
     reason = if reason == [] do
-      reason = "No reason"
+      "No reason"
     else
       reason |> Enum.join(" ")
     end

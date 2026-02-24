@@ -25,7 +25,7 @@ defmodule Sencha.Channel.Modes.Test do
     assert get_in(new, [?v]) |> MapSet.member?("Wiz")
   end
 
-  test "successfully completes RFC 2812 channel MOaddDE case 4", context do
+  test "successfully completes RFC 2812 channel MODE case 4", context do
     {:ok, new} = Sencha.Channel.Modes.parse(context.modes, ["-s"])
 
     assert not get_in(new, [?s])

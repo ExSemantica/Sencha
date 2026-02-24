@@ -1,4 +1,7 @@
 defmodule Sencha.User.Supervisor do
+  @moduledoc """
+  Supervises `Sencha.User` and ensures none of them are duplicate users.
+  """
   use DynamicSupervisor
 
   # ===========================================================================

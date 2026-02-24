@@ -1,4 +1,7 @@
 defmodule Sencha.User do
+  @moduledoc """
+  Handles user-level logic after `Sencha.Handler` hands off its SASL duties.
+  """
   use GenServer, restart: :temporary
 
   # ===========================================================================
@@ -208,7 +211,7 @@ defmodule Sencha.User do
     host = Application.fetch_env!(:sencha, :host)
     version = "sencha-" <> to_string(Application.spec(:sencha)[:vsn])
 
-    [
+    burst = [
       %Sencha.Message{
         prefix: host,
         command: "001",
@@ -253,7 +256,10 @@ defmodule Sencha.User do
         trailing: "are supported by this server"
       }
     ]
-    |> Enum.map(fn message -> Sencha.Handler.send_message(handler, message) end)
+
+    for b <- burst do
+      Sencha.Handler.send_message(handler, b)
+    end
 
     __MODULE__.MOTD.send_to_client(state)
 
