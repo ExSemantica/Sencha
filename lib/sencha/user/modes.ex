@@ -6,12 +6,22 @@ defmodule Sencha.User.Modes do
   @doc """
   Lists supported user modes.
   """
-  def supported(), do: MapSet.new([?o, ?r, ?w])
+  defguard supported() when [?o, ?r, ?w]
+
+  @doc """
+  Lists grantable (/MODE) user modes.
+  """
+  defguard grantable() when [?r, ?w]
 
   @doc """
   Convenience for formatting modes
   """
   def format(modes), do: modes |> MapSet.to_list() |> to_string()
+
+  @doc """
+  Convenience for formatting supported modes
+  """
+  def format_supported(), do: supported() |> to_string()
 
   @doc """
   Grant these upon connection

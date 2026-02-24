@@ -235,18 +235,27 @@ defmodule Sencha.User do
           nickname,
           host,
           version,
-          __MODULE__.Modes.supported() |> __MODULE__.Modes.format(),
-          Sencha.Channel.Modes.supported() |> Sencha.Channel.Modes.format()
+          __MODULE__.Modes.format_supported(),
+          Sencha.Channel.Modes.format_supported(),
+          Sencha.Channel.Modes.format_supported_parameters()
         ]
       },
       %Sencha.Message{
         prefix: host,
         command: "005",
-        params: [nickname, "MAXNICKLEN=#{Sencha.Repo.User.max_nickname_length()}"],
+        params: [
+          nickname,
+          "CHANNELLEN=#{Sencha.Repo.Channel.max_name_length() + 1}",
+          "CHANTYPES=#",
+          "EXTBAN=~,is",
+          "MAXNICKLEN=#{Sencha.Repo.User.max_nickname_length()}"
+        ],
         trailing: "are supported by this server"
       }
     ]
     |> Enum.map(fn message -> Sencha.Handler.send_message(handler, message) end)
+
+    __MODULE__.MOTD.send_to_client(state)
 
     if MapSet.size(modes) > 0 do
       __MODULE__.Modes.send_to_client(state)

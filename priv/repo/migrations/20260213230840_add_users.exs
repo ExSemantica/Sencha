@@ -10,6 +10,8 @@ defmodule Sencha.Repo.Migrations.AddUsers do
       add :locked, :boolean
       add :locked_reason, :string
 
+      add :owned, {:array, :id}
+
       timestamps()
     end
   end
