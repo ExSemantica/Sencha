@@ -24,3 +24,5 @@ term and the reason for your K-Line as the second tuple term.
 ```
 {<<"127.0.0.0/8">>, <<"Test K-Lining localhost">>}.
 ```
+
+TODO: Allow Reverse DNS hostmask K-lines too.

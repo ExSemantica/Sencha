@@ -4,12 +4,14 @@ defmodule Sencha.Repo.Migrations.AddChannels do
   def up do
     create table "channels" do
       add :name, :string
+      add :key, :string
       add :topic, :text
       add :topic_set, :utc_datetime
       add :bans, {:array, :string}
       add :ban_exceptions, {:array, :string}
       add :operators, {:array, :string}
       add :voices, {:array, :string}
+      add :invitation_masks, {:array, :string}
       add :other_modes, :binary
 
       add :user_id, :id

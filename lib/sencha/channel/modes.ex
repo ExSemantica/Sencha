@@ -8,22 +8,22 @@ defmodule Sencha.Channel.Modes do
   @doc """
   Lists supported channel modes.
   """
-  defguard supported() when [?b, ?e, ?O, ?o, ?V, ?v, ?l, ?m, ?t]
+  defguard supported() when [?b, ?e, ?O, ?o, ?V, ?v, ?l, ?m, ?t, ?I, ?i, ?s, ?k]
 
   @doc """
   Lists chanop grantable (/MODE) channel modes.
   """
-  defguard grantable() when [?b, ?e, ?O, ?o, ?V, ?v, ?l, ?m, ?t]
+  defguard grantable() when [?b, ?e, ?O, ?o, ?V, ?v, ?l, ?m, ?t, ?I, ?i, ?s, ?k]
 
   @doc """
   Lists supported channel modes without parameters
   """
-  defguard supported_non_parameters() when [?m, ?t]
+  defguard supported_non_parameters() when [?m, ?t, ?i, ?s]
 
   @doc """
   Lists supported channel modes with MapSet parameters
   """
-  defguard supported_mapset_parameters() when [?b, ?e, ?O, ?o, ?V, ?v]
+  defguard supported_mapset_parameters() when [?b, ?e, ?O, ?o, ?V, ?v, ?I]
 
   @doc """
   Lists supported channel modes with integer parameters
@@ -33,7 +33,7 @@ defmodule Sencha.Channel.Modes do
   @doc """
   Lists supported channel modes with string parameters
   """
-  defguard supported_string_parameters() when []
+  defguard supported_string_parameters() when [?k]
 
   def format_supported(), do: supported() |> to_string()
 
@@ -59,48 +59,110 @@ defmodule Sencha.Channel.Modes do
       ?o => MapSet.new([]),
       ?V => MapSet.new([]),
       ?v => MapSet.new([]),
-      ?l => Sencha.Repo.Channel.default_channel_limit(),
+      ?I => MapSet.new([]),
+      ?l => 0,
       ?m => false,
-      ?t => true
+      ?t => true,
+      ?i => false,
+      ?s => true,
+      ?k => ""
     }
   end
 
-  def merge(old, deltas) do
-    deltas |> Enum.reduce(old, &parse_delta/2)
+  @doc """
+  Given a mode map, try parsing a set of modes such as from the tail of a
+  `Sencha.Message`.
+  """
+  def parse(modemap, [modes | modeparams]) do
+    # EXAMPLE: -bbb test test2 test3
+    # EXAMPLE: +bbbl test test2 test3 1337
+    modes = modes |> to_charlist()
+
+    case modes do
+      [?+ | modes_added] ->
+        {:ok, parse_one(modemap, modes_added, modeparams, :add)}
+
+      [?- | modes_removed] ->
+        {:ok, parse_one(modemap, modes_removed, modeparams, :remove)}
+
+      _ ->
+        :error
+    end
   end
 
-  defp parse_delta(delta, old) do
-    split = String.split(delta, " ")
+  defp parse_one(modemap, [], [], _selection), do: modemap
 
-    split =
-      case split do
-        [a, b] -> [a |> to_charlist, b]
-        [a] -> [a |> to_charlist]
-      end
-      |> List.flatten()
-      |> Enum.filter(fn [_ | tail] ->
-        hd(tail) in supported()
-      end)
+  defp parse_one(modemap, [?k | modes_left], [key | modeparams], :add) do
+    case modemap[?k] do
+      "" ->
+        parse_one(put_in(modemap, [?k], key), modes_left, modeparams, :add)
 
-    case split do
-      [?+, char, param] when char in supported_integer_parameters() ->
-        {int, _} = Integer.parse(param)
-        old |> put_in([char], int)
+      current_key when current_key == key ->
+        parse_one(put_in(modemap, [?k], key), modes_left, modeparams, :add)
 
-      [?+, char, param] when char in supported_string_parameters() ->
-        old |> put_in([char], param)
+      _ ->
+        parse_one(modemap, modes_left, modeparams, :add)
+    end
+  end
 
-      [?+, char] when char in supported_non_parameters() ->
-        old |> put_in([char], true)
+  defp parse_one(modemap, [?k | modes_left], [key | modeparams], :remove) do
+    if key == modemap[?k] do
+      parse_one(put_in(modemap, [?k], ""), modes_left, modeparams, :remove)
+    else
+      parse_one(modemap, modes_left, modeparams, :remove)
+    end
+  end
 
-      [?+, char, param] when char in supported_mapset_parameters() ->
-        old |> update_in([char], fn old_mode -> old_mode |> MapSet.put(param) end)
+  defp parse_one(modemap, [mode | modes_left], modeparams, :add) do
+    cond do
+      mode in supported_non_parameters() ->
+        parse_one(put_in(modemap, [mode], true), modes_left, modeparams, :add)
 
-      [?-, char, param] when char in supported_mapset_parameters() ->
-        old |> update_in([char], fn old_mode -> old_mode |> MapSet.delete(param) end)
+      mode in supported_integer_parameters() ->
+        [param | modeparams] = modeparams
+        {integer, _} = Integer.parse(param)
 
-      [?-, char] when char not in supported_mapset_parameters() ->
-        old |> put_in([char], false)
+        parse_one(put_in(modemap, [mode], integer), modes_left, modeparams, :add)
+
+      mode in supported_string_parameters() ->
+        [param | modeparams] = modeparams
+
+        parse_one(put_in(modemap, [mode], param), modes_left, modeparams, :add)
+
+      mode in supported_mapset_parameters() ->
+        [param | modeparams] = modeparams
+
+        old = get_in(modemap, [mode])
+        new = MapSet.put(old, param)
+
+        parse_one(put_in(modemap, [mode], new), modes_left, modeparams, :add)
+
+      true ->
+        parse_one(modemap, modes_left, modeparams, :add)
+    end
+  end
+
+  defp parse_one(modemap, [mode | modes_left], modeparams, :remove) do
+    cond do
+      mode in supported_non_parameters() ->
+        parse_one(put_in(modemap, [mode], false), modes_left, modeparams, :remove)
+
+      mode in supported_integer_parameters() ->
+        parse_one(put_in(modemap, [mode], 0), modes_left, modeparams, :remove)
+
+      mode in supported_string_parameters() ->
+        parse_one(put_in(modemap, [mode], ""), modes_left, modeparams, :remove)
+
+      mode in supported_mapset_parameters() ->
+        [param | modeparams] = modeparams
+
+        old = get_in(modemap, [mode])
+        new = MapSet.delete(old, param)
+
+        parse_one(put_in(modemap, [mode], new), modes_left, modeparams, :remove)
+
+      true ->
+        parse_one(modemap, modes_left, modeparams, :remove)
     end
   end
 end
