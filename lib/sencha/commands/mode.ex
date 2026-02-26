@@ -4,7 +4,7 @@ defmodule Sencha.Commands.Mode do
   """
   def handle_irc(
         pid,
-        _packet = %Sencha.Message{params: [my_nickname | modes], trailing: nil},
+        _packet = %Sencha.Message{params: [my_nickname | modes_list], trailing: nil},
         {_socket,
          _state = %Sencha.Handler.UserState{
            nickname: nickname,
@@ -14,27 +14,40 @@ defmodule Sencha.Commands.Mode do
       )
       when nickname == my_nickname do
     ustate = Sencha.User.get_state(user)
-    modechar = modes |> to_charlist()
 
+    # Loop and then flatten through every MODE argument the client sent.
     unknowns =
-      case modechar do
-        [?+ | modes] ->
-          grantable = Sencha.User.Modes.get_grantables(modes)
-          Sencha.User.set_modes(user, MapSet.union(ustate.modes, grantable))
-          Sencha.User.Modes.get_nonexistants(modes)
+      modes_list
+      |> Enum.flat_map(fn modes ->
+        modechar = modes |> to_charlist()
 
-        [?- | modes] ->
-          grantable = Sencha.User.Modes.get_grantables(modes)
-          Sencha.User.set_modes(user, MapSet.difference(ustate.modes, grantable))
-          Sencha.User.Modes.get_nonexistants(modes)
+        case modechar do
+          [?+ | modechar_tail] ->
+            grantable = Sencha.User.Modes.get_grantables(modechar_tail)
 
-        [] ->
-          Sencha.User.Modes.send_to_client(ustate)
-          []
+            if MapSet.size(grantable) > 0 do
+              Sencha.User.set_modes(user, MapSet.union(ustate.modes, grantable))
+            end
 
-        _ ->
-          []
-      end
+            Sencha.User.Modes.get_nonexistants(modechar_tail)
+
+          [?- | modechar_tail] ->
+            grantable = Sencha.User.Modes.get_grantables(modechar_tail)
+
+            if MapSet.size(grantable) > 0 do
+              Sencha.User.set_modes(user, MapSet.difference(ustate.modes, grantable))
+            end
+
+            Sencha.User.Modes.get_nonexistants(modechar_tail)
+
+          [] ->
+            Sencha.User.Modes.send_to_client(ustate)
+            []
+
+          _ ->
+            []
+        end
+      end)
 
     if unknowns != [] do
       Sencha.Handler.send_message(pid, %Sencha.Message{
