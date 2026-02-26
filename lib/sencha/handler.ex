@@ -296,9 +296,10 @@ defmodule Sencha.Handler do
     kline =
       :persistent_term.get(Sencha.KLines, [])
       |> Enum.filter(fn kline ->
-        {cidr, _reason} = kline
-
-        InetCidr.contains?(cidr, peer)
+        case kline do
+          {:cidr, cidr, _reason} -> InetCidr.contains?(cidr, peer)
+          {:host, host_regex, _reason} -> Regex.match?(host_regex, host)
+        end
       end)
 
     case kline do

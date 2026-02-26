@@ -12,5 +12,4 @@ config :sencha, Sencha.Repo,
   adapter: Ecto.Adapters.SQLite3,
   database: "data/sencha.db"
 
-config :sencha, host: "192.168.88.32"
 config :sencha, ecto_repos: [Sencha.Repo]

@@ -10,7 +10,6 @@ config :sencha, oper_duration: 30
 
 config :sencha, Sencha.Repo,
   adapter: Ecto.Adapters.SQLite3,
-  database: "data/sencha.db"
+  database: "data/sencha_dev.db"
 
-config :sencha, host: "127.0.0.1"
 config :sencha, ecto_repos: [Sencha.Repo]

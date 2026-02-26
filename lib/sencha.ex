@@ -41,7 +41,7 @@ defmodule Sencha do
         :persistent_term.put(
           Sencha.KLines,
           klines
-          |> Enum.map(fn {cidr_str, reason} -> {cidr_str |> InetCidr.parse_cidr!(), reason} end)
+          |> Enum.map(&parse_kline/1)
         )
 
         Logger.info("Parsed #{length(klines)} K-Lines at '#{klines_path}'")
@@ -51,5 +51,13 @@ defmodule Sencha do
     end
 
     :ok
+  end
+
+  defp parse_kline({:cidr, cidr_str, reason}) do
+    {:cidr, cidr_str |> InetCidr.parse_cidr!(), reason}
+  end
+
+  defp parse_kline({:host, host_regex, reason}) do
+    {:host, host_regex |> Regex.compile!(), reason}
   end
 end
