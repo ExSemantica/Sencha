@@ -63,12 +63,12 @@ defmodule Sencha.Commands.Mode do
 
   def handle_irc(
         pid,
-        _packet = %Sencha.Message{params: [_other_nickname | _modes], trailing: nil},
+        _packet = %Sencha.Message{params: params, trailing: nil},
         {_socket,
          _state = %Sencha.Handler.UserState{
            nickname: nickname,
            authentication_state: :ok
-         }}
+         }} when length(params) > 0
       ) do
     Sencha.Handler.send_message(pid, %Sencha.Message{
       prefix: Application.fetch_env!(:sencha, :host),
