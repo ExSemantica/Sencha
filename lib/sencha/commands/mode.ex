@@ -68,8 +68,9 @@ defmodule Sencha.Commands.Mode do
          _state = %Sencha.Handler.UserState{
            nickname: nickname,
            authentication_state: :ok
-         }} when length(params) > 0
-      ) do
+         }}
+
+      ) when params != [] do
     Sencha.Handler.send_message(pid, %Sencha.Message{
       prefix: Application.fetch_env!(:sencha, :host),
       command: "502",
