@@ -69,8 +69,8 @@ defmodule Sencha.Commands.Mode do
            nickname: nickname,
            authentication_state: :ok
          }}
-
-      ) when params != [] do
+      )
+      when params != [] do
     Sencha.Handler.send_message(pid, %Sencha.Message{
       prefix: Application.fetch_env!(:sencha, :host),
       command: "502",
