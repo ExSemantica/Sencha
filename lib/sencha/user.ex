@@ -176,7 +176,7 @@ defmodule Sencha.User do
       Sencha.User.other_quit(user_pid, hostmask, reason)
     end
 
-    {:noreply, state}
+    {:stop, :normal, state}
   end
 
   @impl GenServer
@@ -287,14 +287,14 @@ defmodule Sencha.User do
   def handle_info({:EXIT, _pid, reason = {:shutdown, :peer_closed}}, state) do
     disconnect(self(), "Connection reset by peer")
 
-    {:stop, reason, state}
+    {:noreply, state}
   end
 
   @impl GenServer
   def handle_info({:EXIT, _pid, reason}, state) do
     disconnect(self(), "Server closed connection")
 
-    {:stop, reason, state}
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -331,7 +331,7 @@ defmodule Sencha.User do
 
     disconnect(self(), "Ping timeout (#{DateTime.diff(t1, t0)} seconds)")
 
-    {:stop, :normal, state}
+    {:noreply, state}
   end
 
   @impl GenServer
