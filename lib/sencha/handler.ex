@@ -465,7 +465,11 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info({:EXIT, _what, :normal}, {socket, state}) do
+  def handle_info({:EXIT, _what, :normal}, {socket, state = %__MODULE__.UserState{user_process: user}}) do
+        if not is_nil(user) and Process.alive?(user) do
+      user |> Sencha.User.disconnect("Connection reset by peer")
+    end
+
     {:noreply, {socket, state}}
   end
 
