@@ -130,7 +130,7 @@ defmodule Sencha.Channel do
         state = %__MODULE__.State{modes: modes, users: users, name: name}
       ) do
     cond do
-      MapSet.member?(modes, ?n) and user_pid not in users ->
+      modes[?n] and user_pid not in users ->
         {:ok, ustate} = Sencha.User.get_state(user_pid)
 
         Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
