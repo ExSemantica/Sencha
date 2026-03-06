@@ -424,6 +424,13 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "PRIVMSG"}}, {socket, state}) do
+    Sencha.Commands.Privmsg.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
   def handle_info(
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}
@@ -474,7 +481,23 @@ defmodule Sencha.Handler do
   # Connection drop callbacks
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_shutdown(socket, _state) do
+  def handle_close(socket, %__MODULE__.UserState{user_process: user}) do
+    if not is_nil(user) and Process.alive?(user) do
+      user |> Sencha.User.disconnect("Connection reset by peer")
+    end
+
+    socket
+    |> perform_close("Connection reset by peer")
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_shutdown(socket, %__MODULE__.UserState{user_process: user}) do
+    if not is_nil(user) and Process.alive?(user) do
+      user |> Sencha.User.disconnect("Server is going offline")
+    end
+
     socket
     |> perform_close("Server is going offline")
 
@@ -482,10 +505,11 @@ defmodule Sencha.Handler do
   end
 
   @impl ThousandIsland.Handler
-  def handle_error(:normal, _socket, _state), do: :ok
+  def handle_error(_reason, socket, %__MODULE__.UserState{user_process: user}) do
+    if not is_nil(user) and Process.alive?(user) do
+      user |> Sencha.User.disconnect("Server closed connection")
+    end
 
-  @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, _state) do
     socket
     |> perform_close("Server closed connection")
 
