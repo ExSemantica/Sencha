@@ -108,14 +108,7 @@ defmodule Sencha.User do
        modes: __MODULE__.Modes.defaults(),
        channel_names: MapSet.new()
      }}
-  end
-
-  @impl GenServer
-  def terminate(_reason, state = %__MODULE__.State{}) do
-    other_quit(self(), __MODULE__.State.hostmask(state), "Server closed connection")
-
-    :ok
-  end
+     end
 
   # ===========================================================================
   # Behavioral callbacks (calling messages)
@@ -290,6 +283,13 @@ defmodule Sencha.User do
   # ===========================================================================
   # Behavioral callbacks (info messages)
   # ===========================================================================
+  @impl GenServer
+  def handle_info(reason = {:shutdown, :peer_closed}, state = %__MODULE__.State{}) do
+    other_quit(self(), __MODULE__.State.hostmask(state), "Connection reset by peer")
+
+    {:stop, reason, state}
+  end
+
   @impl GenServer
   def handle_info(:timeout_ping, state = %__MODULE__.State{handler_process: handler}) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
