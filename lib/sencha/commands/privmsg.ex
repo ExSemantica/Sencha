@@ -28,7 +28,7 @@ defmodule Sencha.Commands.Privmsg do
     else
       {:ok, ustate} = Sencha.User.get_state(user)
 
-      Sencha.Channel.send_message(pid, user, %Sencha.Message{
+      Sencha.Channel.send_message(channel, user, %Sencha.Message{
         prefix: Sencha.User.State.hostmask(ustate),
         command: "PRIVMSG",
         params: [channame],
