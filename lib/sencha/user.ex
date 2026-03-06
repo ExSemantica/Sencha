@@ -285,12 +285,12 @@ defmodule Sencha.User do
   # ===========================================================================
   @impl GenServer
   def handle_info(
-        {:EXIT, where, _reason},
+        {:EXIT, where, reason},
         state = %__MODULE__.State{handler_process: handler}
       )
       when where == handler do
     other_quit(self(), __MODULE__.State.hostmask(state), "Server closed connection")
-    {:noreply, state}
+    {:stop, reason, state}
   end
 
   @impl GenServer
