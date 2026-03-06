@@ -172,6 +172,7 @@ defmodule Sencha.Channel do
         }
       ) do
     cond do
+      # TODO: Separate the join burst into its own module?
       user_pid not in users ->
         {:ok, ustate} = Sencha.User.get_state(user_pid)
 
@@ -181,24 +182,33 @@ defmodule Sencha.Channel do
           params: [name]
         })
 
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :host),
-          command: "332",
-          params: [ustate.nickname, name],
-          trailing: topic
-        })
+        if topic == "" do
+          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :host),
+            command: "331",
+            params: [ustate.nickname, name],
+            trailing: "No topic is set"
+          })
+        else
+          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :host),
+            command: "332",
+            params: [ustate.nickname, name],
+            trailing: topic
+          })
 
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :host),
-          command: "333",
-          params: [
-            ustate.nickname,
-            name,
-            topic_set_by,
-            topic_set |> DateTime.to_unix() |> to_string
-          ],
-          trailing: topic
-        })
+          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :host),
+            command: "333",
+            params: [
+              ustate.nickname,
+              name,
+              topic_set_by,
+              topic_set |> DateTime.to_unix() |> to_string
+            ],
+            trailing: topic
+          })
+        end
 
         Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
           prefix: Application.fetch_env!(:sencha, :host),
