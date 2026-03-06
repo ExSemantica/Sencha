@@ -12,7 +12,8 @@ defmodule Sencha.Application do
       # {Sencha.Worker, arg}
       {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
       Sencha.Repo,
-      Sencha.User.Supervisor
+      Sencha.User.Supervisor,
+      Sencha.Channel.Supervisor
     ]
 
     # This should not be rehashable

@@ -13,7 +13,7 @@ defmodule Sencha.Commands.Oper do
            authentication_state: :ok
          }}
       ) do
-    ustate = Sencha.User.get_state(user)
+    {:ok, ustate} = Sencha.User.get_state(user)
 
     case Sencha.User.Operator.check_authorized(ustate, password, totp) do
       :ok ->

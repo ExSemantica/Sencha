@@ -39,6 +39,4 @@ defmodule Sencha.Repo do
         |> EQRCode.render()
     end
   end
-
-
 end

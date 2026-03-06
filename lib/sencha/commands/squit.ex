@@ -13,7 +13,7 @@ defmodule Sencha.Commands.Squit do
            authentication_state: :ok
          }}
       ) do
-    ustate = Sencha.User.get_state(user)
+    {:ok, ustate} = Sencha.User.get_state(user)
 
     reason = if reason == [] do
       "No reason"

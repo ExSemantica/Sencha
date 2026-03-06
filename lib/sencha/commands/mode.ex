@@ -4,6 +4,41 @@ defmodule Sencha.Commands.Mode do
   """
   def handle_irc(
         pid,
+        packet = %Sencha.Message{params: ["#" <> _channel], trailing: nil},
+        {_socket,
+         _state = %Sencha.Handler.UserState{
+           nickname: nickname,
+           authentication_state: :ok
+         }}
+      ) do
+    [channame] = packet.params
+    [channame | _unimplemented] = channame |> String.split(",")
+
+    channel = GenServer.whereis({:global, channame})
+
+    if is_nil(channel) do
+      Sencha.Handler.send_message(pid, %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "403",
+        params: [nickname, channame],
+        trailing: "No such channel"
+      })
+    else
+      {:ok, %Sencha.Channel.State{modes: modemap}} = Sencha.Channel.get_state(channel)
+      modes = Sencha.Channel.Modes.unparse(modemap)
+
+      Sencha.Handler.send_message(pid, %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "324",
+        params: [[nickname, " ", channame] | modes]
+      })
+    end
+
+    :ok
+  end
+
+  def handle_irc(
+        pid,
         _packet = %Sencha.Message{params: [my_nickname | modes_list], trailing: nil},
         {_socket,
          _state = %Sencha.Handler.UserState{
@@ -13,7 +48,7 @@ defmodule Sencha.Commands.Mode do
          }}
       )
       when nickname == my_nickname do
-    ustate = Sencha.User.get_state(user)
+    {:ok, ustate} = Sencha.User.get_state(user)
 
     # Loop and then flatten through every MODE argument the client sent.
     unknowns =

@@ -10,8 +10,9 @@ defmodule Sencha.User.State do
   - `:last_ping_from_server`: A `DateTime` of the last PING from the server
   - `:modes`: A `MapSet` of this user's MODEs
   - `:nickname`: The nickname assigned to this user
+  - `:channel_names`: Channels this user is in
   """
-  @enforce_keys ~w(handler_process rdns_host timeout_ping last_ping_from_server modes nickname)a
+  @enforce_keys ~w(handler_process rdns_host timeout_ping last_ping_from_server modes nickname channel_names)a
 
   defstruct [
     :handler_process,
@@ -21,7 +22,8 @@ defmodule Sencha.User.State do
     :timeout_operator,
     :last_ping_from_server,
     :modes,
-    :nickname
+    :nickname,
+    :channel_names
   ]
 
   @doc """

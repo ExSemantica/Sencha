@@ -56,12 +56,40 @@ defmodule Sencha.User do
     GenServer.cast(pid, {:wallops, message})
   end
 
+  @doc """
+  Recommended endpoint for a user to 'JOIN' a `Sencha.Channel`
+  """
+  def join(pid, channel_name) do
+    GenServer.cast(pid, {:join, channel_name})
+  end
+
+  @doc """
+  Recommended endpoint for a user to 'PART' a `Sencha.Channel`
+  """
+  def part(pid, channel_name, reason) do
+    GenServer.cast(pid, {:part, channel_name, reason})
+  end
+
+  @doc """
+  Recommended endpoint for a user to send a disconnect reason
+  """
+  def disconnect(pid, reason) do
+    GenServer.cast(pid, {:disconnect, reason})
+  end
+
+  @doc """
+  Recommended endpoint for a user to receive another user's disconnect reason
+  """
+  def other_quit(pid, host, reason) do
+    GenServer.cast(pid, {:other_quit, host, reason})
+  end
+
   # ===========================================================================
   # Behavioral callbacks (initialization)
   # ===========================================================================
   @impl GenServer
   def init(%{handler_process: handler_process, rdns_host: rdns_host, nickname: nickname}) do
-    # Elixir does really weird stuff related to Dynamic Supervisors and
+    # Elixir does really weird stuff related to `Supervisor` processes and
     # counting how many children one has.
     #
     # Therefore, we must delay the welcome burst.
@@ -74,7 +102,8 @@ defmodule Sencha.User do
        rdns_host: rdns_host,
        timeout_ping: do_timeout_ping(),
        last_ping_from_server: DateTime.utc_now(:second),
-       modes: __MODULE__.Modes.defaults()
+       modes: __MODULE__.Modes.defaults(),
+       channel_names: MapSet.new()
      }}
   end
 
@@ -83,7 +112,7 @@ defmodule Sencha.User do
   # ===========================================================================
   @impl GenServer
   def handle_call(:get_state, _from, state) do
-    {:reply, state, state}
+    {:reply, {:ok, state}, state}
   end
 
   # ===========================================================================
@@ -115,6 +144,40 @@ defmodule Sencha.User do
       ) do
     state = %__MODULE__.State{state | modes: new}
     __MODULE__.Modes.send_to_client(state)
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:disconnect, reason},
+        state = %__MODULE__.State{channel_names: channels}
+      ) do
+    hostmask = __MODULE__.State.hostmask(state)
+
+    {_channels, all_users} =
+      channels
+      |> Enum.map_reduce(MapSet.new(), fn channel, acc ->
+        {channel, MapSet.union(acc, Sencha.Channel.users_accumulate({:global, channel}))}
+      end)
+
+    for user_pid <- all_users do
+      Sencha.User.other_quit(user_pid, hostmask, reason)
+    end
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:other_quit, host, reason},
+        state = %__MODULE__.State{handler_process: handler}
+      ) do
+    Sencha.Handler.send_message(handler, %Sencha.Message{
+      prefix: host,
+      command: "QUIT",
+      trailing: reason
+    })
 
     {:noreply, state}
   end
@@ -161,6 +224,49 @@ defmodule Sencha.User do
     end
 
     {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:join, channel_name},
+        state = %__MODULE__.State{
+          handler_process: handler,
+          nickname: nickname,
+          channel_names: channels
+        }
+      ) do
+    case Sencha.Channel.Supervisor.start_child(%{name: channel_name, joiner: nickname}) do
+      {:ok, pid} ->
+        Sencha.Channel.user_join(pid, self())
+
+        {:noreply, %__MODULE__.State{state | channel_names: MapSet.put(channels, channel_name)}}
+
+      {:error, {:already_started, pid}} ->
+        Sencha.Channel.user_join(pid, self())
+
+        {:noreply, %__MODULE__.State{state | channel_names: MapSet.put(channels, channel_name)}}
+
+      {:error, {:locked, name, reason}} ->
+        Sencha.Handler.send_message(handler, %Sencha.Message{
+          prefix: Application.fetch_env!(:sencha, :host),
+          command: "476",
+          params: [nickname, name],
+          trailing: "This channel is locked: " <> reason
+        })
+
+        {:noreply, state}
+    end
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:part, channel_name, reason},
+        state = %__MODULE__.State{
+          channel_names: channels
+        }
+      ) do
+    Sencha.Channel.user_part({:global, channel_name}, self(), reason)
+    {:noreply, %__MODULE__.State{state | channel_names: MapSet.delete(channels, channel_name)}}
   end
 
   # ===========================================================================
@@ -243,6 +349,9 @@ defmodule Sencha.User do
           Sencha.Channel.Modes.format_supported_parameters()
         ]
       },
+      # TODO: Make more mask types
+      # For reference: ~c -> CIDR, ~h -> hostmask, ~u -> username
+      # We only support username bans for now, but we'll support others later
       %Sencha.Message{
         prefix: host,
         command: "005",
@@ -250,7 +359,7 @@ defmodule Sencha.User do
           nickname,
           "CHANNELLEN=#{Sencha.Repo.Channel.max_name_length() + 1}",
           "CHANTYPES=#",
-          "EXTBAN=~,is",
+          "EXTBAN=~,u",
           "MAXNICKLEN=#{Sencha.Repo.User.max_nickname_length()}"
         ],
         trailing: "are supported by this server"

@@ -13,7 +13,7 @@ defmodule Sencha.Commands.Rehash do
            authentication_state: :ok
          }}
       ) do
-    ustate = Sencha.User.get_state(user)
+    {:ok, ustate} = Sencha.User.get_state(user)
 
     if MapSet.member?(ustate.modes, ?o) do
       socket
