@@ -284,8 +284,15 @@ defmodule Sencha.User do
   # Behavioral callbacks (info messages)
   # ===========================================================================
   @impl GenServer
-  def handle_info({:EXIT, _pid, reason = {:shutdown, :peer_closed}}, state = %__MODULE__.State{}) do
-    other_quit(self(), __MODULE__.State.hostmask(state), "Connection reset by peer")
+  def handle_info({:EXIT, _pid, reason = {:shutdown, :peer_closed}}, state) do
+    disconnect(self(), "Connection reset by peer")
+
+    {:stop, reason, state}
+  end
+
+  @impl GenServer
+  def handle_info({:EXIT, _pid, reason}, state) do
+    disconnect(self(), "Server closed connection")
 
     {:stop, reason, state}
   end
