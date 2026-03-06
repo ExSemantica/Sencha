@@ -95,6 +95,9 @@ defmodule Sencha.User do
     # Therefore, we must delay the welcome burst.
     Process.send_after(self(), :timeout_welcome_burst, 100)
 
+    # Trap exits from the handler process
+    Process.flag(:trap_exit, true)
+
     {:ok,
      %__MODULE__.State{
        nickname: nickname,
@@ -278,8 +281,18 @@ defmodule Sencha.User do
   end
 
   # ===========================================================================
-  # Behavioral callbacks (timer messages)
+  # Behavioral callbacks (info messages)
   # ===========================================================================
+  @impl GenServer
+  def handle_info(
+        {:EXIT, where, _reason},
+        state = %__MODULE__.State{handler_process: handler}
+      )
+      when where == handler do
+    other_quit(self(), __MODULE__.State.hostmask(state), "Server closed connection")
+    {:noreply, state}
+  end
+
   @impl GenServer
   def handle_info(:timeout_ping, state = %__MODULE__.State{handler_process: handler}) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
@@ -308,11 +321,11 @@ defmodule Sencha.User do
   @impl GenServer
   def handle_info(
         :timeout_ping_hard,
-        state = %__MODULE__.State{handler_process: handler, last_ping_from_server: t0}
+        state = %__MODULE__.State{last_ping_from_server: t0}
       ) do
     t1 = DateTime.utc_now(:second)
 
-    Sencha.Handler.disconnect(handler, "Ping timeout (#{DateTime.diff(t1, t0)} seconds)")
+    disconnect(self(), "Ping timeout (#{DateTime.diff(t1, t0)} seconds)")
 
     {:stop, :normal, state}
   end

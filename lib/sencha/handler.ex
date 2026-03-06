@@ -45,7 +45,7 @@ defmodule Sencha.Handler do
   @impl GenServer
   def handle_cast({:disconnect, reason}, {socket, state}) do
     # Notify them that their connection has been terminated
-    {socket, state}
+    socket
     |> perform_close(reason)
 
     # Stop this client process
@@ -181,13 +181,13 @@ defmodule Sencha.Handler do
         {:noreply, {socket, %__MODULE__.UserState{state | user_process: pid}}}
 
       {:error, {:already_started, _pid}} ->
-        {socket, state}
+        socket
         |> perform_close("Account already in use")
 
         {:noreply, {socket, state}}
 
       {:error, :max_children} ->
-        {socket, state}
+        socket
         |> perform_close("Too many connections on this server")
 
         {:noreply, {socket, state}}
@@ -309,7 +309,7 @@ defmodule Sencha.Handler do
       kline ->
         # first k-line takes precedence because that is Elixir's happy path
         {_, reason} = hd(kline)
-        {socket, nil} |> perform_close("K-Lined (#{reason})")
+        socket |> perform_close("K-Lined (#{reason})")
 
         :ok
     end
@@ -428,7 +428,7 @@ defmodule Sencha.Handler do
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}
       ) do
-    {socket, state} |> perform_close("Client Quit")
+    socket |> perform_close("Client Quit")
 
     {:noreply, {socket, state}}
   end
@@ -438,7 +438,7 @@ defmodule Sencha.Handler do
         {:irc, %Sencha.Message{command: "ERROR", trailing: err}},
         {socket, state}
       ) do
-    {socket, state} |> perform_close(err)
+    socket |> perform_close(err)
 
     {:noreply, {socket, state}}
   end
@@ -451,7 +451,7 @@ defmodule Sencha.Handler do
 
   @impl GenServer
   def handle_info(:timeout_auth, {socket, state}) do
-    {socket, state}
+    socket
     |> perform_close("Authentication timeout")
 
     {:stop, :normal, {socket, state}}
@@ -464,7 +464,7 @@ defmodule Sencha.Handler do
 
   @impl GenServer
   def handle_info({:EXIT, _what, _reason}, {socket, state}) do
-    {socket, state}
+    socket
     |> perform_close("Server closed connection")
 
     {:noreply, {socket, state}}
@@ -474,8 +474,8 @@ defmodule Sencha.Handler do
   # Connection drop callbacks
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_shutdown(socket, state) do
-    {socket, state}
+  def handle_shutdown(socket, _state) do
+    socket
     |> perform_close("Server is going offline")
 
     :ok
@@ -485,8 +485,8 @@ defmodule Sencha.Handler do
   def handle_error(:normal, _socket, _state), do: :ok
 
   @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, state) do
-    {socket, state}
+  def handle_error(_reason, socket, _state) do
+    socket
     |> perform_close("Server closed connection")
 
     :ok
@@ -495,18 +495,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   # Private callbacks
   # ===========================================================================
-  defp perform_close({socket, state}, reason) do
-    cond do
-      is_nil(state) ->
-        :ok
-
-      state.authentication_state == :ok ->
-        Sencha.User.disconnect(state.user_process, reason)
-
-      true ->
-        :ok
-    end
-
+  defp perform_close(socket, reason) do
     socket
     |> ThousandIsland.Socket.send(
       Sencha.Message.encode(%Sencha.Message{
