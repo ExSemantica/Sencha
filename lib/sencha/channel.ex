@@ -71,6 +71,13 @@ defmodule Sencha.Channel do
   end
 
   @doc """
+  Cleanly removes this user process from the channel.
+  """
+  def user_remove(pid, user_pid) do
+    GenServer.cast(pid, {:user_remove, user_pid})
+  end
+
+  @doc """
   Handles a 'PART' from a `Sencha.User`.
   """
   def set_topic(pid, username, topic) do
@@ -266,6 +273,16 @@ defmodule Sencha.Channel do
   end
 
   @impl GenServer
+  def handle_cast(
+        {:user_remove, user_pid},
+        state = %__MODULE__.State{
+          users: users
+        }
+      ) do
+    {:noreply, %__MODULE__.State{state | users: List.delete(users, user_pid)}}
+  end
+
+  @impl GenServer
   def handle_cast({:set_topic, username, topic}, state = %__MODULE__.State{}) do
     state = %__MODULE__.State{
       state
@@ -317,12 +334,12 @@ defmodule Sencha.Channel do
          end}
       end)
 
-      [
-        mapped[?@] |> Enum.map(&("@" <> &1)) |> Enum.sort(),
-        mapped[?+] |> Enum.map(&("+" <> &1)) |> Enum.sort(),
-        mapped[?_] |> Enum.sort()
-      ]
-      |> List.flatten()
-      |> Enum.join(" ")
+    [
+      mapped[?@] |> Enum.map(&("@" <> &1)) |> Enum.sort(),
+      mapped[?+] |> Enum.map(&("+" <> &1)) |> Enum.sort(),
+      mapped[?_] |> Enum.sort()
+    ]
+    |> List.flatten()
+    |> Enum.join(" ")
   end
 end

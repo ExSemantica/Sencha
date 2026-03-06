@@ -158,7 +158,14 @@ defmodule Sencha.User do
     {_channels, all_users} =
       channels
       |> Enum.map_reduce(MapSet.new(), fn channel, acc ->
-        {channel, MapSet.union(acc, Sencha.Channel.users_accumulate({:global, channel}))}
+        channel_pid = GenServer.whereis({:global, channel})
+
+        if is_nil(channel_pid) do
+          {channel, acc}
+        else
+          channel_pid |> Sencha.Channel.user_remove(self())
+          {channel, MapSet.union(acc, Sencha.Channel.users_accumulate(channel_pid))}
+        end
       end)
 
     for user_pid <- all_users do
