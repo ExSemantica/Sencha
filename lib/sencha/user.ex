@@ -85,7 +85,7 @@ defmodule Sencha.User do
   end
 
   # ===========================================================================
-  # Behavioral callbacks (initialization)
+  # Behavioral callbacks (initialization/termination)
   # ===========================================================================
   @impl GenServer
   def init(%{handler_process: handler_process, rdns_host: rdns_host, nickname: nickname}) do
@@ -94,6 +94,9 @@ defmodule Sencha.User do
     #
     # Therefore, we must delay the welcome burst.
     Process.send_after(self(), :timeout_welcome_burst, 100)
+
+    # Trap exits from the handler process
+    Process.flag(:trap_exit, true)
 
     {:ok,
      %__MODULE__.State{
@@ -105,6 +108,13 @@ defmodule Sencha.User do
        modes: __MODULE__.Modes.defaults(),
        channel_names: MapSet.new()
      }}
+  end
+
+  @impl GenServer
+  def terminate(_reason, state = %__MODULE__.State{}) do
+    other_quit(self(), __MODULE__.State.hostmask(state), "Server closed connection")
+
+    :ok
   end
 
   # ===========================================================================

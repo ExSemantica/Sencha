@@ -465,28 +465,12 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info(
-        {:EXIT, _what, :normal},
-        {socket, state = %__MODULE__.UserState{user_process: user}}
-      ) do
-    if not is_nil(user) and Process.alive?(user) do
-      user |> Sencha.User.disconnect("Connection reset by peer")
-    socket
-    |> perform_close("Connection reset by peer")
-    end
-
+  def handle_info({:EXIT, _what, :normal}, {socket, state}) do
     {:noreply, {socket, state}}
   end
 
   @impl GenServer
-  def handle_info(
-        {:EXIT, _what, _reason},
-        {socket, state = %__MODULE__.UserState{user_process: user}}
-      ) do
-    if not is_nil(user) and Process.alive?(user) do
-      user |> Sencha.User.disconnect("Server closed connection")
-    end
-
+  def handle_info({:EXIT, _what, _reason}, {socket, state}) do
     socket
     |> perform_close("Server closed connection")
 
@@ -497,23 +481,7 @@ defmodule Sencha.Handler do
   # Connection drop callbacks
   # ===========================================================================
   @impl ThousandIsland.Handler
-  def handle_close(socket, %__MODULE__.UserState{user_process: user}) do
-    if not is_nil(user) and Process.alive?(user) do
-      user |> Sencha.User.disconnect("Connection reset by peer")
-    end
-
-    socket
-    |> perform_close("Connection reset by peer")
-
-    :ok
-  end
-
-  @impl ThousandIsland.Handler
-  def handle_shutdown(socket, %__MODULE__.UserState{user_process: user}) do
-    if not is_nil(user) and Process.alive?(user) do
-      user |> Sencha.User.disconnect("Server is going offline")
-    end
-
+  def handle_shutdown(socket, _state) do
     socket
     |> perform_close("Server is going offline")
 
@@ -521,11 +489,10 @@ defmodule Sencha.Handler do
   end
 
   @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, %__MODULE__.UserState{user_process: user}) do
-    if not is_nil(user) and Process.alive?(user) do
-      user |> Sencha.User.disconnect("Server closed connection")
-    end
+  def handle_error(:normal, _socket, _state), do: :ok
 
+  @impl ThousandIsland.Handler
+  def handle_error(_reason, socket, _state) do
     socket
     |> perform_close("Server closed connection")
 
