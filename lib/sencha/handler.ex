@@ -470,7 +470,11 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
-  def handle_info({:EXIT, _what, _reason}, {socket, state}) do
+  def handle_info({:EXIT, _what, _reason}, {socket, state = %__MODULE__.UserState{user_process: user}}) do
+    if not is_nil(user) and Process.alive?(user) do
+      user |> Sencha.User.disconnect("Server closed connection")
+    end
+
     socket
     |> perform_close("Server closed connection")
 

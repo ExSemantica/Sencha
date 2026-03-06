@@ -2,7 +2,7 @@ defmodule Sencha.Channel do
   @moduledoc """
   TODO: clean this code up
   """
-  use GenServer, restart: :temporary
+  use GenServer
 
   # ===========================================================================
   # Public callbacks
