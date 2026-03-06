@@ -417,6 +417,13 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "QUIT"}}, {socket, state}) do
+    Sencha.Commands.Quit.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
   def handle_info(
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}
