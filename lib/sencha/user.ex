@@ -164,7 +164,8 @@ defmodule Sencha.User do
           {channel, acc}
         else
           channel_pid |> Sencha.Channel.user_remove(self())
-          {channel, MapSet.union(acc, Sencha.Channel.users_accumulate(channel_pid))}
+          {:ok, users_set} = Sencha.Channel.users_accumulate(channel_pid)
+          {channel, MapSet.union(acc, users_set)}
         end
       end)
 

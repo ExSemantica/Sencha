@@ -16,6 +16,7 @@ defmodule Sencha.Commands.Quit do
 
     :ok
   end
+
   def handle_irc(
         _pid,
         _packet = %Sencha.Message{trailing: reason},
