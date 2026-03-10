@@ -200,7 +200,7 @@ defmodule Sencha.Channel do
             Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
               prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
               command: "MODE",
-              params: ["+o", owner.nickname]
+              params: [name, "+o", owner.nickname]
             })
           end
         end
@@ -209,7 +209,7 @@ defmodule Sencha.Channel do
           Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
             prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
             command: "MODE",
-            params: ["+o", owner.nickname]
+            params: [name, "+o", owner.nickname]
           })
         end
 
