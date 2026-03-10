@@ -180,7 +180,7 @@ defmodule Sencha.Channel do
         })
 
         __MODULE__.Topic.send(state, ustate)
-        __MODULE__.Names.send(state, ustate, self())
+        __MODULE__.Names.send(state, ustate, user_pid)
 
         uhost = ustate |> Sencha.User.State.hostmask()
 
