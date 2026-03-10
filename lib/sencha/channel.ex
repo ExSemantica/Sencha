@@ -165,10 +165,7 @@ defmodule Sencha.Channel do
         {:user_join, user_pid},
         state = %__MODULE__.State{
           users: users,
-          name: name,
-          topic: topic,
-          topic_set: topic_set,
-          topic_set_by: topic_set_by
+          name: name
         }
       ) do
     cond do
@@ -182,49 +179,13 @@ defmodule Sencha.Channel do
           params: [name]
         })
 
-        if topic == "" do
-          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :host),
-            command: "331",
-            params: [ustate.nickname, name],
-            trailing: "No topic is set"
-          })
-        else
-          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :host),
-            command: "332",
-            params: [ustate.nickname, name],
-            trailing: topic
-          })
-
-          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :host),
-            command: "333",
-            params: [
-              ustate.nickname,
-              name,
-              topic_set_by,
-              topic_set |> DateTime.to_unix() |> to_string
-            ],
-            trailing: topic
-          })
-        end
-
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :host),
-          command: "353",
-          params: [ustate.nickname, "=", name],
-          trailing: [user_pid | users] |> calculate_names(state)
-        })
-
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :host),
-          command: "366",
-          params: [ustate.nickname, name],
-          trailing: "End of /NAMES list"
-        })
+        __MODULE__.Topic.send(state, ustate)
+        __MODULE__.Names.send(state, ustate, self())
 
         uhost = ustate |> Sencha.User.State.hostmask()
+
+        owner = Sencha.Repo.get(Sencha.Repo.User, state.owner)
+        owner? = ustate.nickname == owner.nickname
 
         for receiver_pid <- users do
           {:ok, receiver} = Sencha.User.get_state(receiver_pid)
@@ -233,6 +194,22 @@ defmodule Sencha.Channel do
             prefix: uhost,
             command: "JOIN",
             params: [name]
+          })
+
+          if owner? do
+            Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
+              prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
+              command: "MODE",
+              params: ["+o", owner.nickname]
+            })
+          end
+        end
+
+        if owner? do
+          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+            prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
+            command: "MODE",
+            params: ["+o", owner.nickname]
           })
         end
 
@@ -322,34 +299,5 @@ defmodule Sencha.Channel do
   defp save(_state) do
     # Don't save unregistered channels
     {:error, :unregistered}
-  end
-
-  defp calculate_names(user_pids, %__MODULE__.State{modes: modes}) do
-    {_users, mapped} =
-      user_pids
-      |> Enum.map_reduce(%{?_ => [], ?@ => ["Services"], ?+ => []}, fn user_pid, acc ->
-        {:ok, state} = Sencha.User.get_state(user_pid)
-        user = state.nickname
-
-        {user_pid,
-         cond do
-           ("~u " <> user) in modes[?o] ->
-             update_in(acc, [?@], fn opers -> [user | opers] end)
-
-           ("~u " <> user) in modes[?v] ->
-             update_in(acc, [?+], fn voices -> [user | voices] end)
-
-           true ->
-             update_in(acc, [?_], fn regulars -> [user | regulars] end)
-         end}
-      end)
-
-    [
-      mapped[?@] |> Enum.map(&("@" <> &1)) |> Enum.sort(),
-      mapped[?+] |> Enum.map(&("+" <> &1)) |> Enum.sort(),
-      mapped[?_] |> Enum.sort()
-    ]
-    |> List.flatten()
-    |> Enum.join(" ")
   end
 end
