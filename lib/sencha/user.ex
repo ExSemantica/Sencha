@@ -293,20 +293,22 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_cast({:privmsg, hostmask, message}, state = %__MODULE__.State{handler_process: handler}) do
+  def handle_cast({:privmsg, hostmask, message}, state = %__MODULE__.State{nickname: nick, handler_process: handler}) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
       prefix: hostmask,
       command: "PRIVMSG",
+      params: [nick],
       trailing: message
     })
 
     {:noreply, state}
   end
   @impl GenServer
-  def handle_cast({:notice, hostmask, message}, state = %__MODULE__.State{handler_process: handler}) do
+  def handle_cast({:notice, hostmask, message}, state = %__MODULE__.State{nickname: nick, handler_process: handler}) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
       prefix: hostmask,
       command: "NOTICE",
+      params: [nick],
       trailing: message
     })
 
