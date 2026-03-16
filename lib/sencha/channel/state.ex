@@ -75,9 +75,11 @@ defmodule Sencha.Channel.State do
   Convenience for registering a channel to a `Sencha.Repo.User`.
   """
   def register(name, owner = %Sencha.Repo.User{}) do
-    state = Sencha.Channel.get_state({:global, name})
+    state = Sencha.Channel.get_state({:global, {Sencha.Channel, name}})
 
-    if not state.registered? do
+    if state.registered? do
+      :error
+    else
       %Sencha.Repo.Channel{
         name: name,
         topic: state.topic,
@@ -89,12 +91,10 @@ defmodule Sencha.Channel.State do
       |> Ecto.Changeset.put_assoc(:user, owner)
       |> Sencha.Repo.insert()
 
-      Sencha.Channel.mark_registered({:global, name}, true)
-      Sencha.Channel.mark_owner({:global, name}, owner.id)
+      Sencha.Channel.mark_registered({:global, {Sencha.Channel, name}}, true)
+      Sencha.Channel.mark_owner({:global, {Sencha.Channel, name}}, owner.id)
 
       :ok
-    else
-      :error
     end
   end
 end

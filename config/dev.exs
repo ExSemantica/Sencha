@@ -12,4 +12,6 @@ config :sencha, Sencha.Repo,
   adapter: Ecto.Adapters.SQLite3,
   database: "data/sencha_dev.db"
 
+config :mnesia, dir: ~c"data/sencha_dev_#{node()}"
+
 config :sencha, ecto_repos: [Sencha.Repo]

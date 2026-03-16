@@ -1,6 +1,6 @@
-defmodule Sencha.Commands.Privmsg do
+defmodule Sencha.Commands.Notice do
   @moduledoc """
-  Handle 'PRIVMSG' IRCv3 commands
+  Handle 'NOTICE' IRCv3 commands
   """
   def max_targets(), do: 1
 
@@ -42,7 +42,7 @@ defmodule Sencha.Commands.Privmsg do
 
             Sencha.Channel.send_message(crecipient, user, %Sencha.Message{
               prefix: Sencha.User.State.hostmask(ustate),
-              command: "PRIVMSG",
+              command: "NOTICE",
               params: [target],
               trailing: message
             })
@@ -57,7 +57,7 @@ defmodule Sencha.Commands.Privmsg do
 
           _user ->
             {:ok, ustate} = Sencha.User.get_state(user)
-            Sencha.User.privmsg(urecipient, Sencha.User.State.hostmask(ustate), message)
+            Sencha.User.notice(urecipient, Sencha.User.State.hostmask(ustate), message)
         end
       end
     end

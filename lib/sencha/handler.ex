@@ -431,6 +431,20 @@ defmodule Sencha.Handler do
   end
 
   @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "NOTICE"}}, {socket, state}) do
+    Sencha.Commands.Notice.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info({:irc, packet = %Sencha.Message{command: "NAMES"}}, {socket, state}) do
+    Sencha.Commands.Names.handle_irc(self(), packet, {socket, state})
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
   def handle_info(
         {:irc, %Sencha.Message{command: "ERROR", trailing: nil}},
         {socket, state}

@@ -19,6 +19,9 @@ defmodule Sencha.Application do
     # This should not be rehashable
     :persistent_term.put(Sencha.Application.Started, DateTime.utc_now(:second))
 
+    :mnesia.create_schema([node()])
+    :mnesia.start()
+
     Sencha.rehash()
 
     # See https://hexdocs.pm/elixir/Supervisor.html

@@ -11,7 +11,7 @@ defmodule Sencha.User do
   Start a user process. This occurs after successful authentication.
   """
   def start_link(args = %{nickname: nickname}) do
-    GenServer.start_link(__MODULE__, args, name: {:global, nickname})
+    GenServer.start_link(__MODULE__, args, name: {:global, {__MODULE__, nickname}})
   end
 
   @doc """
@@ -84,6 +84,18 @@ defmodule Sencha.User do
     GenServer.cast(pid, {:other_quit, host, reason})
   end
 
+  @doc """
+  Recommended endpoint to receive a private message from another user.
+  """
+  def privmsg(pid, host, message) do
+    GenServer.cast(pid, {:privmsg, host, message})
+  end
+  @doc """
+  Recommended endpoint to receive a notice from another user.
+  """
+  def notice(pid, host, message) do
+    GenServer.cast(pid, {:notice, host, message})
+  end
   # ===========================================================================
   # Behavioral callbacks (initialization/termination)
   # ===========================================================================
@@ -108,7 +120,7 @@ defmodule Sencha.User do
        modes: __MODULE__.Modes.defaults(),
        channel_names: MapSet.new()
      }}
-     end
+  end
 
   # ===========================================================================
   # Behavioral callbacks (calling messages)
@@ -161,7 +173,7 @@ defmodule Sencha.User do
     {_channels, all_users} =
       channels
       |> Enum.map_reduce(MapSet.new(), fn channel, acc ->
-        channel_pid = GenServer.whereis({:global, channel})
+        channel_pid = GenServer.whereis({:global, {Sencha.Channel, channel}})
 
         if is_nil(channel_pid) do
           {channel, acc}
@@ -276,8 +288,29 @@ defmodule Sencha.User do
           channel_names: channels
         }
       ) do
-    Sencha.Channel.user_part({:global, channel_name}, self(), reason)
+    Sencha.Channel.user_part({:global, {Sencha.Channel, channel_name}}, self(), reason)
     {:noreply, %__MODULE__.State{state | channel_names: MapSet.delete(channels, channel_name)}}
+  end
+
+  @impl GenServer
+  def handle_cast({:privmsg, hostmask, message}, state = %__MODULE__.State{handler_process: handler}) do
+    Sencha.Handler.send_message(handler, %Sencha.Message{
+      prefix: hostmask,
+      command: "PRIVMSG",
+      trailing: message
+    })
+
+    {:noreply, state}
+  end
+  @impl GenServer
+  def handle_cast({:notice, hostmask, message}, state = %__MODULE__.State{handler_process: handler}) do
+    Sencha.Handler.send_message(handler, %Sencha.Message{
+      prefix: hostmask,
+      command: "NOTICE",
+      trailing: message
+    })
+
+    {:noreply, state}
   end
 
   # ===========================================================================
@@ -385,7 +418,9 @@ defmodule Sencha.User do
           "CHANNELLEN=#{Sencha.Repo.Channel.max_name_length() + 1}",
           "CHANTYPES=#",
           "EXTBAN=~,u",
-          "MAXNICKLEN=#{Sencha.Repo.User.max_nickname_length()}"
+          "MAXNICKLEN=#{Sencha.Repo.User.max_nickname_length()}",
+          # TODO: fix these so it will support multiple targets
+          "TARGMAX=JOIN:#{Sencha.Commands.Join.max_targets()},NAMES:#{Sencha.Commands.Names.max_targets()},PART:#{Sencha.Commands.Part.max_targets()},PRIVMSG:#{Sencha.Commands.Privmsg.max_targets()}"
         ],
         trailing: "are supported by this server"
       }

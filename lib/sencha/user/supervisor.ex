@@ -30,8 +30,9 @@ defmodule Sencha.User.Supervisor do
     for {_, pid, _, _} <- workers do
       Sencha.User.wallops(pid, message)
     end
-  end
 
+    :ok
+  end
   # ===========================================================================
   # Behavioral callbacks
   # ===========================================================================

@@ -13,7 +13,7 @@ defmodule Sencha.Channel do
   If the user specifies '/JOIN ##test' then the '##test' global gets registered.
   """
   def start_link(args = %{name: name}) do
-    GenServer.start_link(__MODULE__, args, name: {:global, name})
+    GenServer.start_link(__MODULE__, args, name: {:global, {__MODULE__, name}})
   end
 
   @doc """
@@ -168,55 +168,53 @@ defmodule Sencha.Channel do
           name: name
         }
       ) do
-    cond do
-      # TODO: Separate the join burst into its own module?
-      user_pid not in users ->
-        {:ok, ustate} = Sencha.User.get_state(user_pid)
+    # TODO: Separate the join burst into its own module?
+    if user_pid in users do
+      {:noreply, state}
+    else
+      {:ok, ustate} = Sencha.User.get_state(user_pid)
 
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: ustate |> Sencha.User.State.hostmask(),
+      Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+        prefix: ustate |> Sencha.User.State.hostmask(),
+        command: "JOIN",
+        params: [name]
+      })
+
+      __MODULE__.Topic.send(state, ustate)
+      __MODULE__.Names.send(state, ustate, user_pid)
+
+      uhost = ustate |> Sencha.User.State.hostmask()
+
+      owner = Sencha.Repo.get(Sencha.Repo.User, state.owner)
+      owner? = ustate.nickname == owner.nickname
+
+      for receiver_pid <- users do
+        {:ok, receiver} = Sencha.User.get_state(receiver_pid)
+
+        Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
+          prefix: uhost,
           command: "JOIN",
           params: [name]
         })
 
-        __MODULE__.Topic.send(state, ustate)
-        __MODULE__.Names.send(state, ustate, user_pid)
-
-        uhost = ustate |> Sencha.User.State.hostmask()
-
-        owner = Sencha.Repo.get(Sencha.Repo.User, state.owner)
-        owner? = ustate.nickname == owner.nickname
-
-        for receiver_pid <- users do
-          {:ok, receiver} = Sencha.User.get_state(receiver_pid)
-
-          Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
-            prefix: uhost,
-            command: "JOIN",
-            params: [name]
-          })
-
-          if owner? do
-            Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
-              prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
-              command: "MODE",
-              params: [name, "+o", owner.nickname]
-            })
-          end
-        end
-
         if owner? do
-          Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+          Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
             prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
             command: "MODE",
             params: [name, "+o", owner.nickname]
           })
         end
+      end
 
-        {:noreply, %__MODULE__.State{state | users: [user_pid | users]}}
+      if owner? do
+        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+          prefix: "Services!~Services@" <> Application.fetch_env!(:sencha, :host),
+          command: "MODE",
+          params: [name, "+o", owner.nickname]
+        })
+      end
 
-      true ->
-        {:noreply, state}
+      {:noreply, %__MODULE__.State{state | users: [user_pid | users]}}
     end
   end
 
@@ -230,32 +228,30 @@ defmodule Sencha.Channel do
       ) do
     {:ok, ustate} = Sencha.User.get_state(user_pid)
 
-    cond do
-      user_pid in users ->
-        uhost = ustate |> Sencha.User.State.hostmask()
+    if user_pid in users do
+      uhost = ustate |> Sencha.User.State.hostmask()
 
-        for receiver_pid <- users do
-          {:ok, receiver} = Sencha.User.get_state(receiver_pid)
+      for receiver_pid <- users do
+        {:ok, receiver} = Sencha.User.get_state(receiver_pid)
 
-          Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
-            prefix: uhost,
-            command: "PART",
-            params: [name],
-            trailing: reason
-          })
-        end
-
-        {:noreply, %__MODULE__.State{state | users: List.delete(users, user_pid)}}
-
-      true ->
-        Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :host),
-          command: "442",
-          params: [ustate.nickname, name],
-          trailing: "You're not on that channel"
+        Sencha.Handler.send_message(receiver.handler_process, %Sencha.Message{
+          prefix: uhost,
+          command: "PART",
+          params: [name],
+          trailing: reason
         })
+      end
 
-        {:noreply, state}
+      {:noreply, %__MODULE__.State{state | users: List.delete(users, user_pid)}}
+    else
+      Sencha.Handler.send_message(ustate.handler_process, %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "442",
+        params: [ustate.nickname, name],
+        trailing: "You're not on that channel"
+      })
+
+      {:noreply, state}
     end
   end
 

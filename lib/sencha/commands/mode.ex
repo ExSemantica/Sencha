@@ -14,7 +14,7 @@ defmodule Sencha.Commands.Mode do
     [channame] = packet.params
     [channame | _unimplemented] = channame |> String.split(",")
 
-    channel = GenServer.whereis({:global, channame})
+    channel = GenServer.whereis({:global, {Sencha.Channel, channame}})
 
     if is_nil(channel) do
       Sencha.Handler.send_message(pid, %Sencha.Message{
