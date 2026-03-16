@@ -285,7 +285,7 @@ defmodule Sencha.User do
   # ===========================================================================
   @impl GenServer
   def handle_info({:EXIT, _pid, {:shutdown, :peer_closed}}, state) do
-    disconnect(self(), "Connection reset by peer")
+    disconnect(self(), "Read error: Connection reset by peer")
 
     {:noreply, state}
   end
