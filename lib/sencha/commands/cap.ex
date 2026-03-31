@@ -8,7 +8,13 @@ defmodule Sencha.Commands.Cap do
         {socket, state}
       ) do
     # Some shady IRC clients do not comply with the IRCv3 CAP draft
-    handle_irc(pid, %Sencha.Message{packet | params: ["REQ"], trailing: rest}, {socket, state})
+    [rest] = rest
+
+    handle_irc(
+      pid,
+      %Sencha.Message{packet | params: ["REQ"], trailing: rest},
+      {socket, state}
+    )
   end
 
   def handle_irc(_pid, %Sencha.Message{params: ["LS" | _rest]}, {socket, state}) do
