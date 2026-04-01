@@ -50,8 +50,10 @@ defmodule Sencha.Channel.Modes.Test do
 
     assert get_in(new, [?b]) |> MapSet.member?("*!*@*")
   end
+
   test "successfully completes RFC 2812 channel MODE case 11", context do
-    {:ok, {new, _errors}} = Sencha.Channel.Modes.parse(context.modes, ["+be", "*!*@*.edu", "*!*@*.bu.edu"])
+    {:ok, {new, _errors}} =
+      Sencha.Channel.Modes.parse(context.modes, ["+be", "*!*@*.edu", "*!*@*.bu.edu"])
 
     assert get_in(new, [?b]) |> MapSet.member?("*!*@*.edu")
     assert get_in(new, [?e]) |> MapSet.member?("*!*@*.bu.edu")

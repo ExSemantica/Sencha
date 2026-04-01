@@ -77,18 +77,21 @@ defmodule Sencha.Channel.Modes do
 
   @doc """
   Parse a set of modes such as from the tail of a `Sencha.Message`.
+  - `modemap`: the current set of modes
+  - `modes`/`modeparams`: the mode deltas to attempt to add
+  - `privileged`: true if this operation was done by a channel operator
   """
-  def parse([modes | modeparams], privileged? \\ false) do
+  def parse(modemap, [modes | modeparams], privileged? \\ false) do
     # EXAMPLE: -bbb test test2 test3
     # EXAMPLE: +bbbl test test2 test3 1337
     modes = modes |> to_charlist()
 
     case modes do
       [?+ | modes_added] ->
-        {:ok, parse_one(%{}, modes_added, modeparams, :add, privileged?, %{})}
+        {:ok, parse_one(modemap, modes_added, modeparams, :add, privileged?, %{})}
 
       [?- | modes_removed] ->
-        {:ok, parse_one(%{}, modes_removed, modeparams, :remove, privileged?, %{})}
+        {:ok, parse_one(modemap, modes_removed, modeparams, :remove, privileged?, %{})}
 
       _ ->
         :error
@@ -330,7 +333,7 @@ defmodule Sencha.Channel.Modes do
       mode in supported_mapset_parameters() and modeparams != [] ->
         [param | modeparams] = modeparams
 
-        old = get_in(modemap, [mode])
+        old = get_in(modemap, [mode]) || MapSet.new()
         new = MapSet.put(old, param)
 
         parse_one(
@@ -389,7 +392,7 @@ defmodule Sencha.Channel.Modes do
       mode in supported_mapset_parameters() and modeparams != [] ->
         [param | modeparams] = modeparams
 
-        old = get_in(modemap, [mode])
+        old = get_in(modemap, [mode]) || MapSet.new()
         new = MapSet.delete(old, param)
 
         parse_one(
