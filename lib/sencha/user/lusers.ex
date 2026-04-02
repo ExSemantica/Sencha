@@ -12,7 +12,8 @@ defmodule Sencha.User.Lusers do
       prefix: Application.fetch_env!(:sencha, :host),
       command: "251",
       params: [nick],
-      trailing: "There are #{global.total} users and #{global.invisible} on #{servers} servers"
+      trailing:
+        "There are #{global.total} users and #{global.invisible} invisible on #{servers} servers"
     })
 
     Sencha.Handler.send_message(handler, %Sencha.Message{

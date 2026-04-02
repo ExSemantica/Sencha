@@ -171,9 +171,6 @@ defmodule Sencha.Scoreboard do
       :mnesia.transaction(fn ->
         :mnesia.foldl(
           fn entry, acc ->
-            IO.inspect(entry)
-            IO.inspect(acc)
-
             case entry do
               # ===============================================================
               # Maximum counts are SEPARATE
