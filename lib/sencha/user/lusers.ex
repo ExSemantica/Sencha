@@ -34,7 +34,7 @@ defmodule Sencha.User.Lusers do
       prefix: Application.fetch_env!(:sencha, :host),
       command: "254",
       params: [nick, to_string(channels)],
-      trailing: "channels formed"
+      trailing: "channels registered"
     })
 
     Sencha.Handler.send_message(handler, %Sencha.Message{
