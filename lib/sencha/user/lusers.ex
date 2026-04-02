@@ -2,11 +2,13 @@ defmodule Sencha.User.Lusers do
   @moduledoc """
   Convenience for sending the MOTD.
   """
+  import Ecto.Query
+
   def send_to_client(%Sencha.User.State{handler_process: handler, nickname: nick}) do
     servers = length([node() | Node.list()])
     {:ok, local} = Sencha.Scoreboard.accumulate(false)
     {:ok, global} = Sencha.Scoreboard.accumulate(true)
-    channels = Sencha.Repo.aggregate(Sencha.Repo.Channel, :count)
+    channels = Sencha.Repo.aggregate(from(c in Sencha.Repo.Channel, select: c), :count)
 
     Sencha.Handler.send_message(handler, %Sencha.Message{
       prefix: Application.fetch_env!(:sencha, :host),
