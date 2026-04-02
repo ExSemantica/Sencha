@@ -109,8 +109,8 @@ defmodule Sencha.Scoreboard do
     # We check maximums **after** updating the counter
     :mnesia.transaction(fn ->
       # Store local max
-      max_local = :mnesia.read(Sencha.Scoreboard.Table, {node(), :maximum})
-      total_local = :mnesia.read(Sencha.Scoreboard.Table, {node(), :total})
+      [max_local] = :mnesia.read(Sencha.Scoreboard.Table, {node(), :maximum})
+      [total_local] = :mnesia.read(Sencha.Scoreboard.Table, {node(), :total})
 
       if total_local > max_local do
         :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, total_local})
@@ -133,7 +133,7 @@ defmodule Sencha.Scoreboard do
           :read
         )
 
-      max_global = :mnesia.read(Sencha.Scoreboard.Table, :maximum)
+      [max_global] = :mnesia.read(Sencha.Scoreboard.Table, :maximum)
 
       if total_global > max_global do
         :mnesia.write({Sencha.Scoreboard.Table, :maximum, total_global})
