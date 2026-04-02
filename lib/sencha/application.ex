@@ -25,9 +25,6 @@ defmodule Sencha.Application do
 
     Sencha.rehash()
 
-    # Wait a bit then reset this instance's member counts to 0
-    Process.send_after(Sencha.Scoreboard, :reset_counters, 5_000)
-
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Sencha.Supervisor]
