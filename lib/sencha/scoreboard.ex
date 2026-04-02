@@ -80,7 +80,7 @@ defmodule Sencha.Scoreboard do
   end
 
   @impl GenServer
-  def handle_info(:counters_reset, state) do
+  def handle_info(:reset_counters, state) do
     # This message should only be sent when the server just starts.
     :mnesia.transaction(fn ->
       # Write users total on **this** server
