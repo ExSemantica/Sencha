@@ -17,7 +17,8 @@ defmodule Sencha.Commands.Motd do
   def handle_irc(
         _pid,
         _packet = %Sencha.Message{params: [server]},
-        {_socket, _state = %Sencha.Handler.UserState{authentication_state: :ok, user_process: user}}
+        {_socket,
+         _state = %Sencha.Handler.UserState{authentication_state: :ok, user_process: user}}
       ) do
     if server == Application.fetch_env!(:sencha, :host) do
       Sencha.User.send_motd(user)

@@ -50,6 +50,13 @@ defmodule Sencha.User do
   end
 
   @doc """
+  Sends LUSERS to this user.
+  """
+  def send_lusers(pid) do
+    GenServer.cast(pid, :send_lusers)
+  end
+
+  @doc """
   Sends a WALLOPS to this user.
   """
   def wallops(pid, message) do
@@ -90,12 +97,14 @@ defmodule Sencha.User do
   def privmsg(pid, host, message) do
     GenServer.cast(pid, {:privmsg, host, message})
   end
+
   @doc """
   Recommended endpoint to receive a notice from another user.
   """
   def notice(pid, host, message) do
     GenServer.cast(pid, {:notice, host, message})
   end
+
   # ===========================================================================
   # Behavioral callbacks (initialization/termination)
   # ===========================================================================
@@ -210,18 +219,24 @@ defmodule Sencha.User do
         :grant_operator,
         state = %__MODULE__.State{nickname: nickname, modes: modes, handler_process: handler}
       ) do
-    time = DateTime.utc_now() |> DateTime.add(Application.fetch_env!(:sencha, :oper_duration))
+    if MapSet.member?(modes, ?o) do
+      # User is already an oper. Do nothing.
+      {:noreply, state}
+    else
+      Sencha.Scoreboard.change_operators(1)
+      time = DateTime.utc_now() |> DateTime.add(Application.fetch_env!(:sencha, :oper_duration))
 
-    Sencha.Handler.send_message(handler, %Sencha.Message{
-      prefix: Application.fetch_env!(:sencha, :host),
-      command: "381",
-      params: [nickname],
-      trailing: "Operator temporarily granted until #{time |> DateTime.to_string()}"
-    })
+      Sencha.Handler.send_message(handler, %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :host),
+        command: "381",
+        params: [nickname],
+        trailing: "Operator temporarily granted until #{time |> DateTime.to_string()}"
+      })
 
-    set_modes(self(), MapSet.put(modes, ?o))
+      set_modes(self(), MapSet.put(modes, ?o))
 
-    {:noreply, %__MODULE__.State{state | timeout_operator: do_timeout_operator()}}
+      {:noreply, %__MODULE__.State{state | timeout_operator: do_timeout_operator()}}
+    end
   end
 
   @impl GenServer
@@ -230,6 +245,12 @@ defmodule Sencha.User do
         state
       ) do
     __MODULE__.MOTD.send_to_client(state)
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast(:send_lusers, state) do
+    __MODULE__.Lusers.send_to_client(state)
     {:noreply, state}
   end
 
@@ -293,7 +314,10 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_cast({:privmsg, hostmask, message}, state = %__MODULE__.State{nickname: nick, handler_process: handler}) do
+  def handle_cast(
+        {:privmsg, hostmask, message},
+        state = %__MODULE__.State{nickname: nick, handler_process: handler}
+      ) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
       prefix: hostmask,
       command: "PRIVMSG",
@@ -303,8 +327,12 @@ defmodule Sencha.User do
 
     {:noreply, state}
   end
+
   @impl GenServer
-  def handle_cast({:notice, hostmask, message}, state = %__MODULE__.State{nickname: nick, handler_process: handler}) do
+  def handle_cast(
+        {:notice, hostmask, message},
+        state = %__MODULE__.State{nickname: nick, handler_process: handler}
+      ) do
     Sencha.Handler.send_message(handler, %Sencha.Message{
       prefix: hostmask,
       command: "NOTICE",
@@ -352,6 +380,7 @@ defmodule Sencha.User do
         :timeout_operator,
         state = %__MODULE__.State{modes: modes}
       ) do
+    Sencha.Scoreboard.change_operators(-1)
     set_modes(self(), MapSet.delete(modes, ?o))
 
     {:noreply, state}
@@ -432,6 +461,7 @@ defmodule Sencha.User do
       Sencha.Handler.send_message(handler, b)
     end
 
+    __MODULE__.Lusers.send_to_client(state)
     __MODULE__.MOTD.send_to_client(state)
 
     if MapSet.size(modes) > 0 do

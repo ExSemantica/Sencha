@@ -250,6 +250,7 @@ defmodule Sencha.Handler do
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(socket, _state) do
+    Sencha.Scoreboard.change_total(1)
     {:ok, {peer, _port}} = ThousandIsland.Socket.peername(socket)
 
     socket
@@ -517,6 +518,8 @@ defmodule Sencha.Handler do
   # Private callbacks
   # ===========================================================================
   defp perform_close(socket, reason) do
+    Sencha.Scoreboard.change_total(-1)
+
     socket
     |> ThousandIsland.Socket.send(
       Sencha.Message.encode(%Sencha.Message{

@@ -13,7 +13,8 @@ defmodule Sencha.Application do
       {ThousandIsland, port: 6667, handler_module: Sencha.Handler},
       Sencha.Repo,
       Sencha.User.Supervisor,
-      Sencha.Channel.Supervisor
+      Sencha.Channel.Supervisor,
+      Sencha.Scoreboard
     ]
 
     # This should not be rehashable
@@ -23,6 +24,9 @@ defmodule Sencha.Application do
     :mnesia.start()
 
     Sencha.rehash()
+
+    # Wait a bit then reset this instance's member counts to 0
+    Process.send_after(Sencha.Scoreboard, :reset_counters, 5_000)
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
