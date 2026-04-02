@@ -42,32 +42,32 @@ defmodule Sencha.Channel.State do
         user: real_owner
       } ->
         {:ok,
-          %__MODULE__{
-            name: real_name,
-            users: [],
-            modes: Sencha.Channel.Modes.to_modemap(channel),
-            topic: topic,
-            topic_set: topic_set,
-            topic_set_by: topic_set_by,
-            registered?: true,
-            owner: real_owner
-          }}
+         %__MODULE__{
+           name: real_name,
+           users: [],
+           modes: Sencha.Channel.Modes.to_modemap(channel),
+           topic: topic,
+           topic_set: topic_set,
+           topic_set_by: topic_set_by,
+           registered?: true,
+           owner: real_owner
+         }}
 
       %Sencha.Repo.Channel{name: real_name, locked_reason: locked_reason} ->
         {:error, {:locked, real_name, locked_reason}}
 
       nil ->
         {:ok,
-          %__MODULE__{
-            name: name,
-            users: [],
-            modes: Sencha.Channel.Modes.defaults(),
-            topic: "",
-            topic_set: DateTime.utc_now(:second),
-            registered?: false,
-            owner: user.id,
-            topic_set_by: "Services"
-          }}
+         %__MODULE__{
+           name: name,
+           users: [],
+           modes: Sencha.Channel.Modes.defaults(),
+           topic: "",
+           topic_set: DateTime.utc_now(:second),
+           registered?: false,
+           owner: user.id,
+           topic_set_by: "Services"
+         }}
     end
   end
 
@@ -75,7 +75,7 @@ defmodule Sencha.Channel.State do
   Convenience for registering a channel to a `Sencha.Repo.User`.
   """
   def register(name, owner = %Sencha.Repo.User{}) do
-    state = Sencha.Channel.get_state({:global, {Sencha.Channel, name}})
+    {:ok, state} = Sencha.Channel.get_state({:global, {Sencha.Channel, name}})
 
     if state.registered? do
       :error
