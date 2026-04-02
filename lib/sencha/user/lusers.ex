@@ -4,8 +4,8 @@ defmodule Sencha.User.Lusers do
   """
   def send_to_client(%Sencha.User.State{handler_process: handler, nickname: nick}) do
     servers = length([node() | Node.list()])
-    local = Sencha.Scoreboard.accumulate(true)
-    global = Sencha.Scoreboard.accumulate(true)
+    {:ok, local} = Sencha.Scoreboard.accumulate(false)
+    {:ok, global} = Sencha.Scoreboard.accumulate(true)
     channels = Sencha.Repo.aggregate(Sencha.Repo.Channel, :count)
 
     Sencha.Handler.send_message(handler, %Sencha.Message{
