@@ -31,9 +31,9 @@ defmodule Sencha.MixProject do
       # Framework for TCP-based socketing
       {:thousand_island, "~> 1.4"},
 
-      # Handle local SQLite-based test database
+      # Handle PostgreSQL database
       {:ecto, "~> 3.13"},
-      {:ecto_sqlite3, "~> 0.22"},
+      {:ecto_sql, "~> 3.13"},
 
       # Authentication provider locally (only for the local SQLite database)
       {:argon2_elixir, "~> 4.1"},

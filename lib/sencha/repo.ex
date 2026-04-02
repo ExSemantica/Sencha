@@ -4,7 +4,7 @@ defmodule Sencha.Repo do
   """
   use Ecto.Repo,
     otp_app: :sencha,
-    adapter: Ecto.Adapters.SQLite3
+    adapter: Ecto.Adapters.Postgres
 
   @doc """
   Add a user without operator privileges
