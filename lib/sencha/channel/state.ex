@@ -52,7 +52,7 @@ defmodule Sencha.Channel.State do
            topic_set: topic_set,
            topic_set_by: topic_set_by,
            registered?: true,
-           owner: real_owner
+           owner: real_owner.id
          }}
 
       %Sencha.Repo.Channel{name: real_name, locked_reason: locked_reason} ->
