@@ -251,6 +251,7 @@ defmodule Sencha.Handler do
   @impl ThousandIsland.Handler
   def handle_connection(socket, _state) do
     Sencha.Scoreboard.change_total(1)
+
     {:ok, {peer, _port}} = ThousandIsland.Socket.peername(socket)
 
     socket

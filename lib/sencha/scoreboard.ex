@@ -105,48 +105,53 @@ defmodule Sencha.Scoreboard do
   @impl GenServer
   def handle_cast({:change_total, num}, state) do
     # I think the dirty counter updates are lagging behind. Let's try this.
-    :mnesia.transaction(fn ->
-      # Store local max
-      [{Sencha.Scoreboard.Table, {_node, :maximum}, max_local}] =
-        :mnesia.read(Sencha.Scoreboard.Table, {node(), :maximum})
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        # Store local max
+        [{Sencha.Scoreboard.Table, {_node, :maximum}, max_local}] =
+          :mnesia.read(Sencha.Scoreboard.Table, {node(), :maximum})
 
-      [{Sencha.Scoreboard.Table, {_node, :total}, total_local}] =
-        :mnesia.read(Sencha.Scoreboard.Table, {node(), :total})
+        [{Sencha.Scoreboard.Table, {_node, :total}, total_local}] =
+          :mnesia.read(Sencha.Scoreboard.Table, {node(), :total})
 
-      total_local = total_local + num
+        total_local = total_local + num
 
-      if total_local > max_local do
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, total_local})
-      end
+        if total_local > max_local do
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, total_local})
+        end
 
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, total_local})
-    end)
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, total_local})
+        :ok
+      end)
 
-    :mnesia.transaction(fn ->
-      # Store global max
-      total_global =
-        :mnesia.foldl(
-          fn entry, acc ->
-            case entry do
-              {Sencha.Scoreboard.Table, {_node, :total}, count} ->
-                acc + count
+    {:atomic, :ok} =
+      :mnesia.transaction(fn ->
+        # Store global max
+        total_global =
+          :mnesia.foldl(
+            fn entry, acc ->
+              case entry do
+                {Sencha.Scoreboard.Table, {_node, :total}, count} ->
+                  acc + count
 
-              _other ->
-                acc
-            end
-          end,
-          0,
-          Sencha.Scoreboard.Table,
-          :read
-        )
+                _other ->
+                  acc
+              end
+            end,
+            0,
+            Sencha.Scoreboard.Table,
+            :read
+          )
 
-      [{Sencha.Scoreboard.Table, :maximum, max_global}] =
-        :mnesia.read(Sencha.Scoreboard.Table, :maximum)
+        [{Sencha.Scoreboard.Table, :maximum, max_global}] =
+          :mnesia.read(Sencha.Scoreboard.Table, :maximum)
 
-      if total_global > max_global do
-        :mnesia.write({Sencha.Scoreboard.Table, :maximum, total_global})
-      end
-    end)
+        if total_global > max_global do
+          :mnesia.write({Sencha.Scoreboard.Table, :maximum, total_global})
+        end
+
+        :ok
+      end)
 
     {:noreply, state}
   end
