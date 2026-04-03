@@ -30,7 +30,9 @@ defmodule Sencha.Channel.State do
   """
   def init(name, joiner) do
     user = Sencha.Repo.one(from(u in Sencha.Repo.User, where: u.nickname == ^joiner))
-    channel = Sencha.Repo.one(from(c in Sencha.Repo.Channel, where: c.name == ^name))
+
+    channel =
+      Sencha.Repo.one(from(c in Sencha.Repo.Channel, where: c.name == ^name, preload: [:user]))
 
     case channel do
       channel = %Sencha.Repo.Channel{
