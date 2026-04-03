@@ -68,7 +68,10 @@ defmodule Sencha.Scoreboard do
              disc_only_copies: []
            ) do
         {:atomic, :ok} ->
-          :mnesia.transaction(fn -> :mnesia.write({Sencha.Scoreboard.Table, :maximum, 0}) end)
+          :mnesia.transaction(fn ->
+            :mnesia.write({Sencha.Scoreboard.Table, :maximum, 0})
+          end)
+
           :ok
 
         {:aborted, {:already_exists, Sencha.Scoreboard.Table}} ->
@@ -76,30 +79,31 @@ defmodule Sencha.Scoreboard do
           :ok
       end
 
+    # Canary any scoreboard entry to ensure we actually need a new scoreboard
+    case :mnesia.read(Sencha.Scoreboard.Table, {node(), :total}) do
+      [_canary] ->
+        :ok
+
+      [] ->
+        # Write users total on **this** server
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, 0})
+
+        # Write users maximum on **this** server
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, 0})
+
+        # Write users with invisible on **this** server
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :invisible}, 0})
+
+        # Write IRC operators on **this** server
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :operators}, 0})
+
+        # Write pending connections on **this** server
+        :mnesia.write({Sencha.Scoreboard.Table, {node(), :unknown}, 0})
+
+        :ok
+    end
+
     {:ok, []}
-  end
-
-  @impl GenServer
-  def handle_info(:reset_counters, state) do
-    # This message should only be sent when the server just starts.
-    :mnesia.transaction(fn ->
-      # Write users total on **this** server
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, 0})
-
-      # Write users maximum on **this** server
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, 0})
-
-      # Write users with invisible on **this** server
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :invisible}, 0})
-
-      # Write IRC operators on **this** server
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :operators}, 0})
-
-      # Write pending connections on **this** server
-      :mnesia.write({Sencha.Scoreboard.Table, {node(), :unknown}, 0})
-    end)
-
-    {:noreply, state}
   end
 
   @impl GenServer
