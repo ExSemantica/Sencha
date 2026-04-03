@@ -2,6 +2,11 @@ defmodule Sencha.Commands.Pong do
   @moduledoc """
   Handle 'PONG' IRCv3 commands
   """
+  def handle_irc(pid, packet = %Sencha.Message{params: [server]}, {socket, state}) do
+    # some IRC clients don't abide by the specs (see `Sencha.Commands.Cap`)
+    handle_irc(pid, %Sencha.Message{packet | trailing: server}, {socket, state})
+  end
+
   def handle_irc(
         _pid,
         _packet = %Sencha.Message{trailing: server},
