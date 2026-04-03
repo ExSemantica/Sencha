@@ -110,6 +110,8 @@ defmodule Sencha.User do
   # ===========================================================================
   @impl GenServer
   def init(%{handler_process: handler_process, rdns_host: rdns_host, nickname: nickname}) do
+    Sencha.Scoreboard.change_total(1)
+
     # Elixir does really weird stuff related to `Supervisor` processes and
     # counting how many children one has.
     #
@@ -177,6 +179,8 @@ defmodule Sencha.User do
         {:disconnect, reason},
         state = %__MODULE__.State{channel_names: channels}
       ) do
+    Sencha.Scoreboard.change_total(-1)
+
     hostmask = __MODULE__.State.hostmask(state)
 
     {_channels, all_users} =

@@ -127,6 +127,7 @@ defmodule Sencha.Scoreboard do
         end
 
         :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, total_local})
+
         :ok
       end)
 
