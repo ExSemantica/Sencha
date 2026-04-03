@@ -80,28 +80,30 @@ defmodule Sencha.Scoreboard do
       end
 
     # Canary any scoreboard entry to ensure we actually need a new scoreboard
-    case :mnesia.read(Sencha.Scoreboard.Table, {node(), :total}) do
-      [_canary] ->
-        :ok
+    :mnesia.transaction(fn ->
+      case :mnesia.read(Sencha.Scoreboard.Table, {node(), :total}) do
+        [_canary] ->
+          :ok
 
-      [] ->
-        # Write users total on **this** server
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, 0})
+        [] ->
+          # Write users total on **this** server
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, 0})
 
-        # Write users maximum on **this** server
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, 0})
+          # Write users maximum on **this** server
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, 0})
 
-        # Write users with invisible on **this** server
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :invisible}, 0})
+          # Write users with invisible on **this** server
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :invisible}, 0})
 
-        # Write IRC operators on **this** server
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :operators}, 0})
+          # Write IRC operators on **this** server
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :operators}, 0})
 
-        # Write pending connections on **this** server
-        :mnesia.write({Sencha.Scoreboard.Table, {node(), :unknown}, 0})
+          # Write pending connections on **this** server
+          :mnesia.write({Sencha.Scoreboard.Table, {node(), :unknown}, 0})
 
-        :ok
-    end
+          :ok
+      end
+    end)
 
     {:ok, []}
   end
