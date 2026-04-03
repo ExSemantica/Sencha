@@ -8,9 +8,8 @@ config :sencha,
       """)
 
 config :sencha, Sencha.Repo,
-  adapter: Ecto.Adapters.Postgres,
-  database:
-    System.get_env("SENCHA_POSTGRES_URI") ||
+  url:
+    System.get_env("SENCHA_DATABASE") ||
       raise("""
-      environment variable SENCHA_POSTGRES_URI is missing.
+      environment variable SENCHA_DATABASE is missing.
       """)

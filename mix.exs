@@ -34,6 +34,7 @@ defmodule Sencha.MixProject do
       # Handle PostgreSQL database
       {:ecto, "~> 3.13"},
       {:ecto_sql, "~> 3.13"},
+      {:postgrex, "~> 0.22"},
 
       # Authentication provider locally (only for the local SQLite database)
       {:argon2_elixir, "~> 4.1"},

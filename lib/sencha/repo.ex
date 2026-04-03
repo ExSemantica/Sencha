@@ -6,9 +6,6 @@ defmodule Sencha.Repo do
     otp_app: :sencha,
     adapter: Ecto.Adapters.Postgres
 
-  @doc """
-  Add a user without operator privileges
-  """
   def add_regular(username, password) do
     __MODULE__.insert(%__MODULE__.User{
       nickname: username,
