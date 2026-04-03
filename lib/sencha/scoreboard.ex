@@ -104,9 +104,7 @@ defmodule Sencha.Scoreboard do
 
   @impl GenServer
   def handle_cast({:change_total, num}, state) do
-    :mnesia.dirty_update_counter({Sencha.Scoreboard.Table, {node(), :total}}, num)
-
-    # We check maximums **after** updating the counter
+    # I think the dirty counter updates are lagging behind. Let's try this.
     :mnesia.transaction(fn ->
       # Store local max
       [{Sencha.Scoreboard.Table, {_node, :maximum}, max_local}] =
@@ -115,10 +113,16 @@ defmodule Sencha.Scoreboard do
       [{Sencha.Scoreboard.Table, {_node, :total}, total_local}] =
         :mnesia.read(Sencha.Scoreboard.Table, {node(), :total})
 
+      total_local = total_local + num
+
       if total_local > max_local do
         :mnesia.write({Sencha.Scoreboard.Table, {node(), :maximum}, total_local})
       end
 
+      :mnesia.write({Sencha.Scoreboard.Table, {node(), :total}, total_local})
+    end)
+
+    :mnesia.transaction(fn ->
       # Store global max
       total_global =
         :mnesia.foldl(
