@@ -177,7 +177,7 @@ defmodule Sencha.User do
   @impl GenServer
   def handle_cast(
         {:disconnect, reason},
-        state = %__MODULE__.State{channel_names: channels}
+        state = %__MODULE__.State{handler_process: handler, channel_names: channels}
       ) do
     Sencha.Scoreboard.change_total(-1)
 
@@ -200,6 +200,12 @@ defmodule Sencha.User do
     for user_pid <- all_users do
       Sencha.User.other_quit(user_pid, hostmask, reason)
     end
+
+    Sencha.Handler.send_message(handler, %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :host),
+      command: "ERROR",
+      trailing: "Closing Link: #{Application.fetch_env!(:sencha, :host)} (#{reason})"
+    })
 
     {:stop, :normal, state}
   end
