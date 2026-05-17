@@ -1,0 +1,4 @@
+[tools]
+elixir = "1.19.5-otp-28"
+elixir-ls = { version = "0.30.0", symlink_bins = "true" }
+erlang = "28.5"

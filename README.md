@@ -1,0 +1,2 @@
+# Sencha
+Elixir IRC daemon
