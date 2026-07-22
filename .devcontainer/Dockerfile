@@ -20,7 +20,7 @@ ARG DEBIAN_VERSION=trixie-20260713-slim
 # No need for builder/runner here
 ARG DEVENV_IMAGE="hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 
-FROM ${DEVENV_IMAGE} as devenv
+FROM ${DEVENV_IMAGE} AS devenv
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -35,12 +35,12 @@ RUN apt update && \
 # Separately from APT update/upgrade/install, we add the user and let them sudo
 RUN groupadd --gid ${USER_GID} ${USERNAME} && \
     useradd -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
-    apt install -y sudo && \
-    echo ${USERNAME} ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/${USERNAME} && \
-    chmod 0440 /etc/sudoers/${USERNAME}
+    apt install -y sudo git && \
+    echo "${USERNAME} ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
+    chmod 0440 /etc/sudoers.d/${USERNAME}
 
 # We're done with auto-packaging
 ENV DEBIAN_FRONTEND=dialog
 
 USER ${USERNAME}
-ENV HOME /home/${USERNAME}
+ENV HOME=/home/${USERNAME}
