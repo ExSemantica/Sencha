@@ -17,6 +17,8 @@ defmodule Sencha do
   Documentation for `Sencha`.
   """
 
+  @re_hostname ~r/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/
+
   @doc """
   Hello world.
 
@@ -28,5 +30,36 @@ defmodule Sencha do
   """
   def hello do
     :world
+  end
+
+  @doc """
+  Checks if the input is a valid hostname.
+
+  ## Examples
+
+      iex> Sencha.check_hostname("what@example.com")
+      false
+
+      iex> Sencha.check_hostname("example.com")
+      true
+
+  """
+  def check_hostname(hostname) do
+    # SEE: RFC 1123
+    Regex.match?(@re_hostname, hostname)
+  end
+
+  @doc """
+  Checks if the input is a valid nickname.
+  """
+  def check_nickname(username) do
+    l = byte_size(username)
+    long? = 0 < l and l <= Sencha.Repo.User.max_length_name()
+
+    if long? do
+      Regex.match?(Sencha.Repo.User.regex_name(), username)
+    else
+      false
+    end
   end
 end

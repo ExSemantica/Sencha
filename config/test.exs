@@ -1,4 +1,4 @@
-# Application startup
+# Configuration for unit test environments
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,22 +12,4 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
-  @moduledoc false
-
-  use Application
-
-  @impl true
-  def start(_type, _args) do
-    children = [
-      # Sencha.Repo
-    ]
-
-    # See https://hexdocs.pm/elixir/Supervisor.html
-    # for other strategies and supported options
-    opts = [strategy: :one_for_one, name: Sencha.Supervisor]
-    Supervisor.start_link(children, opts)
-  end
-end
+import Config

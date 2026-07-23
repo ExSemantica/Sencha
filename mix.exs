@@ -36,8 +36,14 @@ defmodule Sencha.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      # {:dep_from_hexpm, "~> 0.3.0"},
-      # {:dep_from_git, git: "https://github.com/elixir-lang/my_dep.git", tag: "0.1.0"}
+      # PostgreSQL support
+      {:ecto_sql, "~> 3.14"},
+      {:postgrex, "~> 0.22"},
+      # TCP socket support
+      {:thousand_island, "~> 1.5"},
+      # Code cleanliness, etc.
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false, warn_if_outdated: true}
     ]
   end
 end
