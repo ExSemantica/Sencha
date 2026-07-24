@@ -19,7 +19,7 @@ defmodule Sencha.MixProject do
     [
       app: :sencha,
       version: "0.4.0",
-      elixir: "~> 1.19",
+      elixir: "~> 1.20",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -43,7 +43,9 @@ defmodule Sencha.MixProject do
       {:thousand_island, "~> 1.5"},
       # Code cleanliness, etc.
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false, warn_if_outdated: true}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false, warn_if_outdated: true},
+      # Test IRCv3 message cases
+      {:yaml_elixir, "~> 2.12", only: [:test]}
     ]
   end
 end

@@ -16,12 +16,18 @@ defmodule Sencha.Message do
   @moduledoc """
   RFC 2812 IRC message handling
 
-  TODO: Should be tested
+  - `tags`: The client sends these tags
+  - `s_tags`: The server sends these tags, considered separate length from `tags`
+  - `prefix`: The IRC target
+  - `command`: The IRC command
+  - `middle`: The IRC parameters
+  - `traiing`: The IRC trailng parameters
   """
   @enforce_keys [:command]
-  defstruct [:prefix, :command, :middle, :trailing]
+  defstruct [:tags, :s_tags, :prefix, :command, :middle, :trailing]
 
   @max_params 14
+  @max_bytes_tags 4095
   @max_bytes 510
 
   defguardp nospcrlfcl(c)
@@ -31,55 +37,24 @@ defmodule Sencha.Message do
   defguardp trailing(c)
             when nospcrlfcl(c) or c == ?: or c == 0x20
 
-  defguardp letter(c) when c in 0x41..0x5A or c in 0x61..0x7A
-
-  defguardp digit(c) when c in 0x30..0x39
-
   defguardp check_length_params(params) when length(params) <= @max_params
+  defguardp check_length_tags(bytes) when byte_size(bytes) <= @max_bytes_tags
   defguardp check_length(bytes) when byte_size(bytes) <= @max_bytes
 
   defp parse_prefix(struct = %__MODULE__{}, ":" <> prefix) do
-    decoded = %Sencha.Prefix{nickname: nickname, host: host} = Sencha.Prefix.decode(prefix)
-    valid_host? = Sencha.check_hostname(host)
-    valid_nickname? = if is_nil(nickname), do: true, else: Sencha.check_nickname(nickname)
-
-    if valid_host? and valid_nickname? do
-      %__MODULE__{struct | prefix: decoded}
-    end
-  end
-
-  defp parse_prefix(_struct, _prefix) do
-    {:error, :invalid}
-  end
-
-  defp parse_command(command) do
-    valid_command? = command |> to_charlist |> Enum.all?(&letter/1)
-
-    valid_numeric? = command |> to_charlist |> Enum.all?(&digit/1)
-    valid_numeric? = valid_numeric? && byte_size(command) == 3
-
-    command
-    |> parse_command_stage1(valid_command?: valid_command?, valid_numeric?: valid_numeric?)
-  end
-
-  defp parse_command_stage1(command, valid_command?: false, valid_numeric?: true) do
-    %__MODULE__{command: command}
-  end
-
-  defp parse_command_stage1(command, valid_command?: true, valid_numeric?: false) do
-    %__MODULE__{command: command}
-  end
-
-  defp parse_command_stage1(_command, _invalid) do
-    {:error, :invalid}
+    %__MODULE__{struct | prefix: prefix}
   end
 
   defp parse_tail_stage2(struct = %__MODULE__{}, nil, params) do
-    %__MODULE__{struct | middle: params |> Enum.reverse()}
+    %__MODULE__{struct | middle: params |> Enum.reject(&(&1 == "")) |> Enum.reverse()}
   end
 
   defp parse_tail_stage2(struct = %__MODULE__{}, trailing, params) do
-    %__MODULE__{struct | trailing: trailing |> check_trailing, middle: params |> Enum.reverse()}
+    %__MODULE__{
+      struct
+      | trailing: trailing |> check_trailing,
+        middle: params |> Enum.reject(&(&1 == "")) |> Enum.reverse()
+    }
   end
 
   defp check_param(param) do
@@ -138,38 +113,214 @@ defmodule Sencha.Message do
     |> parse_tail_stage1(tail, [])
   end
 
-  defp parse_tail(error = {:error, _what}, _type) do
-    error
-  end
-
-  def decode(bytes) when check_length(bytes) do
-    has_prefix? = bytes |> String.first() == ":"
+  defp parse_stage0(message) do
+    has_prefix? = message |> String.first() == ":"
 
     if has_prefix? do
-      [prefix, tail] = String.split(bytes, " ", parts: 2)
+      [prefix, tail] = String.split(message, " ", parts: 2)
       [t0 | t1] = String.split(tail, " ", parts: 2)
 
-      parse_command(t0) |> parse_prefix(prefix) |> parse_tail(t1)
+      %__MODULE__{command: t0, middle: []} |> parse_prefix(prefix) |> parse_tail(t1)
     else
-      [t0 | t1] = String.split(bytes, " ", parts: 2)
-      parse_command(t0) |> parse_tail(t1)
+      [t0 | t1] = String.split(message, " ", parts: 2)
+      %__MODULE__{command: t0, middle: []} |> parse_tail(t1)
     end
   end
 
-  def encode(%__MODULE__{prefix: nil, command: command, middle: middle, trailing: nil}) do
-    [command, middle] |> List.flatten() |> Enum.join(" ")
+  defp parse_tags(tags) when byte_size(tags) > 0 do
+    tags |> String.split(";") |> Enum.map(&parse_one_tag/1) |> Map.new()
   end
-  def encode(%__MODULE__{prefix: nil, command: command, middle: middle, trailing: trailing}) do
-    [command, middle, ":" <> trailing] |> List.flatten() |> Enum.join(" ")
+
+  defp parse_tags(_), do: nil
+
+  defp parse_one_tag(tag) do
+    case String.split(tag, "=", parts: 2) do
+      [t0, t1] ->
+        {_cmd, t1_reduced} =
+          t1
+          |> to_charlist()
+          |> Enum.reduce(
+            {:noescape, []},
+            fn e, {cmd, acc} ->
+              case e do
+                ?\\ when cmd == :noescape ->
+                  {:escape, acc}
+
+                ?: when cmd == :escape ->
+                  {:noescape, [?; | acc]}
+
+                ?s when cmd == :escape ->
+                  {:noescape, [0x20 | acc]}
+
+                ?\\ when cmd == :escape ->
+                  {:noescape, [?\\ | acc]}
+
+                ?r when cmd == :escape ->
+                  {:noescape, [?\r | acc]}
+
+                ?n when cmd == :escape ->
+                  {:noescape, [?\n | acc]}
+
+                ch ->
+                  {:noescape, [ch | acc]}
+              end
+            end
+          )
+
+        {t0,
+         t1_reduced
+         |> Enum.reverse()
+         |> to_string}
+
+
+      [t0] ->
+        {t0, ""}
+    end
   end
-  def encode(%__MODULE__{prefix: prefix, command: command, middle: middle, trailing: nil}) do
-    [":" <> (prefix |> Sencha.Prefix.encode()), command, middle]
+
+  @doc """
+  Decodes a byte string into a structure representing an IRCv3 command
+  """
+  def decode(bytes) do
+    has_tags? = bytes |> String.first() == "@"
+
+    {tags, message} =
+      if has_tags? do
+        ["@" <> tags, message] = String.split(bytes, " ", parts: 2)
+        {tags, message}
+      else
+        {"", bytes}
+      end
+
+    cond do
+      check_length_tags(tags) and check_length(message) ->
+        # IRCv3 tags and message are sane
+        valid = %__MODULE__{} = parse_stage0(message)
+        %__MODULE__{valid | tags: parse_tags(tags)}
+
+      check_length(message) ->
+        # IRCv3 tags are not sane, message is sane
+        invalid = %__MODULE__{} = parse_stage0(message)
+        %__MODULE__{invalid | tags: :too_many_tags}
+
+      true ->
+        nil
+    end
+  end
+
+  defp sanitize_tag(tag) do
+    tag
+    |> to_charlist()
+    |> Enum.map(fn c ->
+      case c do
+        ?; -> "\\:"
+        0x20 -> "\\s"
+        ?\\ -> "\\\\"
+        ?\r -> "\\r"
+        ?\n -> "\\n"
+        _ -> c
+      end
+    end)
+    |> List.flatten()
+    |> to_string()
+  end
+
+  defp inject_tags(final, tags, s_tags) when check_length(final) do
+    tags_pre =
+      if is_nil(tags) do
+        ""
+      else
+        tags
+        |> Map.to_list()
+        |> Enum.map(fn {k, v} ->
+          if is_nil(v) or v == "", do: k, else: k <> "=" <> sanitize_tag(v)
+        end)
+        |> Enum.join(";")
+      end
+
+    s_tags_pre =
+      if is_nil(s_tags) do
+        ""
+      else
+        s_tags
+        |> Map.to_list()
+        |> Enum.map(fn {k, v} ->
+          if is_nil(v) or v == "", do: k, else: k <> "=" <> sanitize_tag(v)
+        end)
+        |> Enum.join(";")
+      end
+
+    cond do
+      tags_pre == "" and s_tags_pre == "" ->
+        final
+
+      tags_pre == "" and check_length_tags(s_tags_pre) ->
+        "@" <> s_tags_pre <> " " <> final
+
+      s_tags_pre == "" and check_length_tags(tags_pre) ->
+        "@" <> tags_pre <> " " <> final
+
+      check_length_tags(tags_pre) and check_length_tags(s_tags_pre) ->
+        "@" <> tags_pre <> ";" <> s_tags_pre <> " " <> final
+
+      true ->
+        {:error, :too_many_tags}
+    end
+  end
+
+  @doc """
+  Encodes the structure into one IRCv3 packet, no CRLF
+  """
+  def encode(%__MODULE__{
+        tags: tags,
+        s_tags: s_tags,
+        prefix: nil,
+        command: command,
+        middle: middle,
+        trailing: nil
+      }) do
+    [command, middle] |> List.flatten() |> Enum.join(" ") |> inject_tags(tags, s_tags)
+  end
+
+  def encode(%__MODULE__{
+        tags: tags,
+        s_tags: s_tags,
+        prefix: nil,
+        command: command,
+        middle: middle,
+        trailing: trailing
+      }) do
+    [command, middle, ":" <> trailing]
     |> List.flatten()
     |> Enum.join(" ")
+    |> inject_tags(tags, s_tags)
   end
-  def encode(%__MODULE__{prefix: prefix, command: command, middle: middle, trailing: trailing}) do
-    [":" <> (prefix |> Sencha.Prefix.encode()), command, middle, ":" <> trailing]
+
+  def encode(%__MODULE__{
+        tags: tags,
+        s_tags: s_tags,
+        prefix: prefix,
+        command: command,
+        middle: middle,
+        trailing: nil
+      }) do
+    [":" <> prefix, command, middle]
     |> List.flatten()
     |> Enum.join(" ")
+    |> inject_tags(tags, s_tags)
+  end
+
+  def encode(%__MODULE__{
+        tags: tags,
+        s_tags: s_tags,
+        prefix: prefix,
+        command: command,
+        middle: middle,
+        trailing: trailing
+      }) do
+    [":" <> prefix, command, middle, ":" <> trailing]
+    |> List.flatten()
+    |> Enum.join(" ")
+    |> inject_tags(tags, s_tags)
   end
 end

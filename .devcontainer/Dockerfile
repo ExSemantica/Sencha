@@ -12,8 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-ARG ELIXIR_VERSION=1.19.5
-ARG OTP_VERSION=28.5.0.3
+ARG ELIXIR_VERSION=1.20.2
+ARG OTP_VERSION=29.0.3
 ARG DEBIAN_VERSION=trixie-20260713-slim
 
 # NOTE: The Erlang/OTP version is the most recent supported version, not 29.x
