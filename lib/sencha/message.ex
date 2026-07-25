@@ -133,6 +133,15 @@ defmodule Sencha.Message do
 
   defp parse_tags(_), do: nil
 
+  # Cleaner way of nesting function bodies
+  defp parse_one_tag_escaping(?\\, {:noescape, acc}), do: {:escape, acc}
+  defp parse_one_tag_escaping(?:, {:escape, acc}), do: {:noescape, [?; | acc]}
+  defp parse_one_tag_escaping(?s, {:escape, acc}), do: {:noescape, [0x20 | acc]}
+  defp parse_one_tag_escaping(?\\, {:escape, acc}), do: {:noescape, [?\\ | acc]}
+  defp parse_one_tag_escaping(?r, {:escape, acc}), do: {:noescape, [?\r | acc]}
+  defp parse_one_tag_escaping(?n, {:escape, acc}), do: {:noescape, [?\n | acc]}
+  defp parse_one_tag_escaping(e, {_cmd, acc}), do: {:noescape, [e | acc]}
+
   defp parse_one_tag(tag) do
     case String.split(tag, "=", parts: 2) do
       [t0, t1] ->
@@ -141,37 +150,13 @@ defmodule Sencha.Message do
           |> to_charlist()
           |> Enum.reduce(
             {:noescape, []},
-            fn e, {cmd, acc} ->
-              case e do
-                ?\\ when cmd == :noescape ->
-                  {:escape, acc}
-
-                ?: when cmd == :escape ->
-                  {:noescape, [?; | acc]}
-
-                ?s when cmd == :escape ->
-                  {:noescape, [0x20 | acc]}
-
-                ?\\ when cmd == :escape ->
-                  {:noescape, [?\\ | acc]}
-
-                ?r when cmd == :escape ->
-                  {:noescape, [?\r | acc]}
-
-                ?n when cmd == :escape ->
-                  {:noescape, [?\n | acc]}
-
-                ch ->
-                  {:noescape, [ch | acc]}
-              end
-            end
+            &parse_one_tag_escaping/2
           )
 
         {t0,
          t1_reduced
          |> Enum.reverse()
          |> to_string}
-
 
       [t0] ->
         {t0, ""}
@@ -225,47 +210,36 @@ defmodule Sencha.Message do
     |> to_string()
   end
 
+  defp inject_one_tag({k, v}) when is_nil(v) or v == "", do: k
+  defp inject_one_tag({k, v}), do: k <> "=" <> sanitize_tag(v)
+
+  defp concatenate_tags(nil), do: ""
+
+  defp concatenate_tags(tags) do
+    tags
+    |> Map.to_list()
+    |> Enum.map_join(";", &inject_one_tag/1)
+  end
+
+  defp check_tags_final(final, "", ""), do: final
+
+  defp check_tags_final(final, tags, "") when check_length_tags(tags),
+    do: "@" <> tags <> " " <> final
+
+  defp check_tags_final(final, "", s_tags) when check_length_tags(s_tags),
+    do: "@" <> s_tags <> " " <> final
+
+  defp check_tags_final(final, tags, s_tags)
+       when check_length_tags(tags) and check_length_tags(s_tags),
+       do: "@" <> tags <> ";" <> s_tags <> " " <> final
+
+  defp check_tags_final(_final, _tags, _s_tags), do: {:error, :too_many_tags}
+
   defp inject_tags(final, tags, s_tags) when check_length(final) do
-    tags_pre =
-      if is_nil(tags) do
-        ""
-      else
-        tags
-        |> Map.to_list()
-        |> Enum.map(fn {k, v} ->
-          if is_nil(v) or v == "", do: k, else: k <> "=" <> sanitize_tag(v)
-        end)
-        |> Enum.join(";")
-      end
+    tags_pre = concatenate_tags(tags)
+    s_tags_pre = concatenate_tags(s_tags)
 
-    s_tags_pre =
-      if is_nil(s_tags) do
-        ""
-      else
-        s_tags
-        |> Map.to_list()
-        |> Enum.map(fn {k, v} ->
-          if is_nil(v) or v == "", do: k, else: k <> "=" <> sanitize_tag(v)
-        end)
-        |> Enum.join(";")
-      end
-
-    cond do
-      tags_pre == "" and s_tags_pre == "" ->
-        final
-
-      tags_pre == "" and check_length_tags(s_tags_pre) ->
-        "@" <> s_tags_pre <> " " <> final
-
-      s_tags_pre == "" and check_length_tags(tags_pre) ->
-        "@" <> tags_pre <> " " <> final
-
-      check_length_tags(tags_pre) and check_length_tags(s_tags_pre) ->
-        "@" <> tags_pre <> ";" <> s_tags_pre <> " " <> final
-
-      true ->
-        {:error, :too_many_tags}
-    end
+    final |> check_tags_final(tags_pre, s_tags_pre)
   end
 
   @doc """

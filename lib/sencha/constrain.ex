@@ -1,4 +1,4 @@
-# Configuration at run time
+# Pre-PostgreSQL constraining
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,20 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Constrain do
+  @moduledoc """
+  Pre-PostgreSQL constraining
 
-# PostgreSQL Server
-if config_env() == :prod do
-  database =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      Please define the environment variable `DATABASE_URL` to have an Ecto URL
-
-      To know how to define this URL, see:
-        https://ecto.hexdocs.pm/Ecto.Repo.html#module-urls
-      """
-
-  config :sencha, Sencha.Repo,
-    url: database,
-    pool_size: 10
+  The database `citext`/`text` does not support specifying length constraints
+  """
 end

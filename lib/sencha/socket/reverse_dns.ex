@@ -1,4 +1,4 @@
-# Configuration at run time
+# Reverse DNS lookup
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,20 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Socket.ReverseDNS do
+  @moduledoc """
+  Reverse DNS lookup
+  """
+  @doc """
+  Performs the reverse DNS lookup.
 
-# PostgreSQL Server
-if config_env() == :prod do
-  database =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      Please define the environment variable `DATABASE_URL` to have an Ecto URL
+  Ensure you do this in a `Task` of sorts.
+  """
+  def lookup(addr) do
+    case :inet_res.gethostbyaddr(addr) do
+      {:ok, hostent} ->
+        {:hostent, h_name, _, _, _, _} = hostent
+        {:ok, h_name |> to_string}
 
-      To know how to define this URL, see:
-        https://ecto.hexdocs.pm/Ecto.Repo.html#module-urls
-      """
-
-  config :sencha, Sencha.Repo,
-    url: database,
-    pool_size: 10
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
 end

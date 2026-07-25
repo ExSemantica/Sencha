@@ -1,4 +1,4 @@
-# Configuration at run time
+# Migrate 'users' in postgres table
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,20 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Repo.Migrations.CreateUsers do
+  use Ecto.Migration
 
-# PostgreSQL Server
-if config_env() == :prod do
-  database =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      Please define the environment variable `DATABASE_URL` to have an Ecto URL
+  def change do
+    execute "CREATE EXTENSION IF NOT EXISTS citext", "DROP EXTENSION citext"
 
-      To know how to define this URL, see:
-        https://ecto.hexdocs.pm/Ecto.Repo.html#module-urls
-      """
+    create table("users") do
+      add :name, :citext
+      add :hash, :binary
 
-  config :sencha, Sencha.Repo,
-    url: database,
-    pool_size: 10
+      timestamps(type: :utc_datetime)
+    end
+
+    create unique_index("users", :name)
+  end
 end

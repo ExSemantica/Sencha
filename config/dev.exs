@@ -13,3 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import Config
+
+# Change this...
+config :sencha, Sencha.Repo,
+    url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
+    pool_size: 10

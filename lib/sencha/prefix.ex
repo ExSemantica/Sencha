@@ -21,7 +21,7 @@ defmodule Sencha.Prefix do
   - There is a nickname, user, and host
   """
   @enforce_keys [:host]
-  @re_validate ~r/^([^\!\?\@]+)\!([^\!\?\@]+)\@([^\!\?\@]+)$/
+  @re_validate ~r/^(?:([^\!\@]+)\!)?(?:([^\!\@]+)\@)?([^\!\@]+)$/
   defstruct [:nickname, :user, :host]
 
   @doc """
@@ -44,5 +44,34 @@ defmodule Sencha.Prefix do
 
   def encode(%__MODULE__{nickname: nickname, user: user, host: host}) do
     nickname <> "!" <> user <> "@" <> host
+  end
+
+  @doc """
+  Checks if this prefix matches a given match mask
+  """
+  def match?(%__MODULE__{nickname: nickname, user: user, host: host}, match) do
+    [_, m_nickname, m_user, m_host] = Regex.run(@re_validate, match)
+
+    nickname? =
+      if is_nil(nickname) do
+        true
+      else
+        m_nickname = if m_nickname == "", do: "*", else: m_nickname
+
+        Sencha.Mask.match?(nickname, m_nickname)
+      end
+
+    user? =
+      if is_nil(user) do
+        true
+      else
+        m_user = if m_user == "", do: "*", else: m_user
+
+        Sencha.Mask.match?(user, m_user)
+      end
+
+    host? = Sencha.Mask.match?(host, m_host)
+
+    [nickname?, user?, host?] |> Enum.all?()
   end
 end

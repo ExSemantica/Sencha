@@ -35,7 +35,7 @@ RUN apt update && \
 # Separately from APT update/upgrade/install, we add the user and let them sudo
 RUN groupadd --gid ${USER_GID} ${USERNAME} && \
     useradd -s /bin/bash --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} && \
-    apt install -y sudo git && \
+    apt install -y sudo git build-essential libargon2-dev && \
     echo "${USERNAME} ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} && \
     chmod 0440 /etc/sudoers.d/${USERNAME}
 

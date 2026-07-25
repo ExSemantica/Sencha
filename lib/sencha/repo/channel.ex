@@ -22,28 +22,33 @@ defmodule Sencha.Repo.Channel do
 
   schema "channels" do
     # Visible channel name including its prefix
-    field(:name, :binary)
+    field(:name, :string)
     # Visible channel topic
-    field(:topic, :binary)
+    field(:topic, :string)
+    # Who changed the topic? The user might've been deleted so don't reference
+    field(:topic_changed_by, :string)
 
     # SEE: https://modern.ircdocs.horse/#rpltopicwhotime-333
     field(:topic_changed, :utc_datetime)
 
-    belongs_to(:user, Sencha.Repo.User)
+    # `Sencha.Mask` of the founding user, or null
+    field(:founder_mask, :binary)
 
     # SEE: https://modern.ircdocs.horse/#rplcreationtime-329
     # Ecto provides us with creation timestamps automatically
     timestamps()
   end
 
-  def max_length_name(), do: 31
-  def max_length_topic(), do: 127
-
   def changeset(struct, params \\ %{}) do
     struct
-    |> Ecto.Changeset.cast(params, [:name, :topic])
-    |> Ecto.Changeset.validate_required([:name, :topic])
-    |> Ecto.Changeset.validate_length(:name, min: 1, max: max_length_name())
-    |> Ecto.Changeset.validate_length(:topic, min: 1, max: max_length_topic())
+    |> Ecto.Changeset.cast(params, [
+      :name,
+      :topic,
+      :topic_changed_by,
+      :topic_changed,
+      :founder_mask
+    ])
+    |> Ecto.Changeset.unique_constraint([:name], message: "is already taken")
+    |> Ecto.Changeset.validate_required([:name, :founder_mask])
   end
 end

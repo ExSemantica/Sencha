@@ -1,4 +1,4 @@
-# Configuration at run time
+# ThousandIsland TCP socket handler
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,20 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Socket do
+  @moduledoc """
+  ThousandIsland TCP socket handler
+  """
+  use ThousandIsland.Handler
 
-# PostgreSQL Server
-if config_env() == :prod do
-  database =
-    System.get_env("DATABASE_URL") ||
-      raise """
-      Please define the environment variable `DATABASE_URL` to have an Ecto URL
-
-      To know how to define this URL, see:
-        https://ecto.hexdocs.pm/Ecto.Repo.html#module-urls
-      """
-
-  config :sencha, Sencha.Repo,
-    url: database,
-    pool_size: 10
+  @impl ThousandIsland.Handler
+  def handle_connection(socket, state) do
+  end
 end

@@ -41,6 +41,15 @@ defmodule Sencha.MixProject do
       {:postgrex, "~> 0.22"},
       # TCP socket support
       {:thousand_island, "~> 1.5"},
+      # K-Lines are CIDR-based
+      {:inet_cidr, "~> 1.0"},
+      # Parse hostmasks
+      {:nimble_parsec, "~> 1.4"},
+      # Hash passwords
+      {:argon2_elixir, "~> 4.1"},
+      # Unicode unmangling for name/channel suggestions
+      {:unidecode, "~> 1.0"},
+
       # Code cleanliness, etc.
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false, warn_if_outdated: true},
