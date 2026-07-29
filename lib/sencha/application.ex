@@ -22,7 +22,10 @@ defmodule Sencha.Application do
   @impl true
   def start(_type, _args) do
     children = [
-      Sencha.Repo
+      Sencha.Repo,
+      Sencha.KLine,
+      Sencha.Supervisor.User,
+      {ThousandIsland, port: 6667, handler_module: Sencha.Socket}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

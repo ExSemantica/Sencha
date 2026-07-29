@@ -1,4 +1,4 @@
-# RFC 2812 IRC prefix data structure
+# RFC 2812 IRC prefix
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +14,13 @@
 # limitations under the License.
 defmodule Sencha.Prefix do
   @moduledoc """
-  RFC 2812 IRC prefix data structure
+  RFC 2812 IRC prefix
 
   Note there are two cases:
   - There is only a host
   - There is a nickname, user, and host
   """
-  @enforce_keys [:host]
   @re_validate ~r/^(?:([^\!\@]+)\!)?(?:([^\!\@]+)\@)?([^\!\@]+)$/
-  defstruct [:nickname, :user, :host]
 
   @doc """
   Parse a prefix, note that not all of the generated prefixes are valid, so you
@@ -31,25 +29,28 @@ defmodule Sencha.Prefix do
   def decode(what) do
     case Regex.run(@re_validate, what) do
       [_what, nickname, user, host] ->
-        %__MODULE__{nickname: nickname, user: user, host: host}
+        %{nickname: nickname, user: user, host: host}
 
       _error ->
-        %__MODULE__{nickname: nil, user: nil, host: what}
+        %{nickname: nil, user: nil, host: what}
     end
   end
 
-  def encode(%__MODULE__{nickname: nil, user: nil, host: host}) do
+  @doc """
+  Makes this prefix into a string
+  """
+  def encode(%{nickname: nil, user: nil, host: host}) do
     host
   end
 
-  def encode(%__MODULE__{nickname: nickname, user: user, host: host}) do
+  def encode(%{nickname: nickname, user: user, host: host}) do
     nickname <> "!" <> user <> "@" <> host
   end
 
   @doc """
   Checks if this prefix matches a given match mask
   """
-  def match?(%__MODULE__{nickname: nickname, user: user, host: host}, match) do
+  def match?(%{nickname: nickname, user: user, host: host}, match) do
     [_, m_nickname, m_user, m_host] = Regex.run(@re_validate, match)
 
     nickname? =

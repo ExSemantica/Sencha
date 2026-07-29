@@ -32,7 +32,10 @@ defmodule Sencha.Repo.Channel do
     field(:topic_changed, :utc_datetime)
 
     # `Sencha.Mask` of the founding user, or null
-    field(:founder_mask, :binary)
+    field(:founder_mask, :string)
+
+    # Channel modes that stay after the operator(s) leave
+    field(:sticky_modes, {:array, :string})
 
     # SEE: https://modern.ircdocs.horse/#rplcreationtime-329
     # Ecto provides us with creation timestamps automatically
@@ -46,9 +49,9 @@ defmodule Sencha.Repo.Channel do
       :topic,
       :topic_changed_by,
       :topic_changed,
-      :founder_mask
+      :sticky_modes
     ])
     |> Ecto.Changeset.unique_constraint([:name], message: "is already taken")
-    |> Ecto.Changeset.validate_required([:name, :founder_mask])
+    |> Ecto.Changeset.validate_required([:name])
   end
 end

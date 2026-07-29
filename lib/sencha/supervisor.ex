@@ -1,4 +1,4 @@
-# Configuration for unit test environments
+# Group for supervisors
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Supervisor do
+  @moduledoc """
+  Group for supervisors
 
-# Change this...
-config :sencha, Sencha.Repo,
-    url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_test",
-    pool_size: 10
-
-config :sencha, hostname: "192.168.88.100"
+  These are usually based around `DynamicSupervisor`
+  """
+end

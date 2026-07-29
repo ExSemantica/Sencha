@@ -28,4 +28,12 @@ if config_env() == :prod do
   config :sencha, Sencha.Repo,
     url: database,
     pool_size: 10
+
+  host =
+    System.get_env("HOST_URL") ||
+      raise """
+      Please define the environment variable `HOST_URL` to have the IRC server hostname
+      """
+
+  config :sencha, hostname: host
 end

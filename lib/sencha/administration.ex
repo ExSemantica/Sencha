@@ -26,7 +26,7 @@ defmodule Sencha.Administration do
          }
          |> Sencha.Constrain.User.safe_insert() do
       {:ok, _user} ->
-        Logger.notice("User '#{username}' has been registered.")
+        Logger.notice("User '#{username}' has been registered")
 
       {:error, changeset} ->
         for error <- changeset.errors do
@@ -42,17 +42,17 @@ defmodule Sencha.Administration do
     Sencha.Repo.one!(from(u in Sencha.Repo.User, where: ilike(u.name, ^username), select: u))
     |> Sencha.Repo.delete!()
 
-    Logger.notice("User '#{username}' has been removed.")
+    Logger.notice("User '#{username}' has been removed")
   end
 
-  def channel_register(name, founder_mask) do
+  def channel_register(name, modes) do
     case %Sencha.Repo.Channel{
       name: name,
-      founder_mask: founder_mask
+      sticky_modes: modes
     } |> Sencha.Constrain.Channel.safe_insert() do
 
       {:ok, _user} ->
-        Logger.notice("Channel '#{name}' has been registered to '#{founder_mask}'.")
+        Logger.notice("Channel '#{name}' has been registered")
 
       {:error, changeset} ->
         for error <- changeset.errors do
@@ -69,6 +69,6 @@ defmodule Sencha.Administration do
     Sencha.Repo.one!(from(c in Sencha.Repo.Channel, where: ilike(c.name, ^channel), select: c))
     |> Sencha.Repo.delete!()
 
-    Logger.notice("Channel '#{channel}' has been removed.")
+    Logger.notice("Channel '#{channel}' has been removed")
   end
 end

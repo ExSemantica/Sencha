@@ -23,7 +23,7 @@ defmodule Sencha.Repo.Migrations.CreateChannels do
       add :topic, :text
       add :topic_changed, :utc_datetime
       add :topic_changed_by, :text
-      add :founder_mask, :binary
+      add :sticky_modes, {:array, :text}
 
       timestamps(type: :utc_datetime)
     end

@@ -242,57 +242,43 @@ defmodule Sencha.Message do
     final |> check_tags_final(tags_pre, s_tags_pre)
   end
 
+  defp inject_parameters(nil, command, params) when is_nil(params) or params == [] do
+    [command]
+  end
+
+  defp inject_parameters(nil, command, params) do
+    [command, params]
+  end
+
+  defp inject_parameters(prefix, command, params) when is_nil(params) or params == [] do
+    [":" <> prefix, command]
+  end
+
+  defp inject_parameters(prefix, command, params) do
+    [":" <> prefix, command, params]
+  end
+
+  defp inject_trailing(list, nil) do
+    list
+  end
+
+  defp inject_trailing(list, trailing) do
+    [list, ":" <> trailing]
+  end
+
   @doc """
   Encodes the structure into one IRCv3 packet, no CRLF
   """
   def encode(%__MODULE__{
         tags: tags,
         s_tags: s_tags,
-        prefix: nil,
-        command: command,
-        middle: middle,
-        trailing: nil
-      }) do
-    [command, middle] |> List.flatten() |> Enum.join(" ") |> inject_tags(tags, s_tags)
-  end
-
-  def encode(%__MODULE__{
-        tags: tags,
-        s_tags: s_tags,
-        prefix: nil,
-        command: command,
-        middle: middle,
-        trailing: trailing
-      }) do
-    [command, middle, ":" <> trailing]
-    |> List.flatten()
-    |> Enum.join(" ")
-    |> inject_tags(tags, s_tags)
-  end
-
-  def encode(%__MODULE__{
-        tags: tags,
-        s_tags: s_tags,
-        prefix: prefix,
-        command: command,
-        middle: middle,
-        trailing: nil
-      }) do
-    [":" <> prefix, command, middle]
-    |> List.flatten()
-    |> Enum.join(" ")
-    |> inject_tags(tags, s_tags)
-  end
-
-  def encode(%__MODULE__{
-        tags: tags,
-        s_tags: s_tags,
         prefix: prefix,
         command: command,
         middle: middle,
         trailing: trailing
       }) do
-    [":" <> prefix, command, middle, ":" <> trailing]
+    inject_parameters(prefix, command, middle)
+    |> inject_trailing(trailing)
     |> List.flatten()
     |> Enum.join(" ")
     |> inject_tags(tags, s_tags)

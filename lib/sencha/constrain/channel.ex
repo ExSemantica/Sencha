@@ -29,16 +29,13 @@ defmodule Sencha.Constrain.Channel do
   @doc """
   Inserts a `Sencha.Repo.Channel` with pre-constraints
   """
-  def safe_insert(struct = %Sencha.Repo.Channel{name: name, topic: topic, founder_mask: mask}) do
+  def safe_insert(struct = %Sencha.Repo.Channel{name: name, topic: topic}) do
     cond do
       byte_size(name) > @max_length_name ->
         {:error, %{errors: [{:name, {"exceeds maximum channel name length", :PREVALIDATION}}]}}
 
       not is_nil(topic) and byte_size(topic) > @max_length_topic ->
         {:error, %{errors: [{:topic, {"exceeds maximum topic name length", :PREVALIDATION}}]}}
-
-      not Sencha.Mask.valid?(mask) ->
-        {:error, %{errors: [{:founder_mask, {"has invalid founder mask", :PREVALIDATION}}]}}
 
       not Regex.match?(@regex, name) ->
         unidecoded =

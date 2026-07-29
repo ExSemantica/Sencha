@@ -48,18 +48,4 @@ defmodule Sencha do
     # SEE: RFC 1123
     Regex.match?(@re_hostname, hostname)
   end
-
-  @doc """
-  Checks if the input is a valid nickname.
-  """
-  def check_nickname(username) do
-    l = byte_size(username)
-    long? = 0 < l and l <= Sencha.Repo.User.max_length_name()
-
-    if long? do
-      Regex.match?(Sencha.Repo.User.regex_name(), username)
-    else
-      false
-    end
-  end
 end

@@ -14,7 +14,9 @@
 # limitations under the License.
 import Config
 
-# Change this...
+# Change these...
 config :sencha, Sencha.Repo,
-    url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
-    pool_size: 10
+  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
+  pool_size: 10
+
+config :sencha, hostname: "192.168.88.100"
