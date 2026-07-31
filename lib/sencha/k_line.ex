@@ -46,8 +46,8 @@ defmodule Sencha.KLine do
   @doc """
   Attempt to remove a K-Line by its identifier
   """
-  def pop(cidr_string) do
-    GenServer.cast(__MODULE__, {:pop, cidr_string})
+  def pop(id) do
+    GenServer.cast(__MODULE__, {:pop, id})
   end
 
   @doc """
@@ -69,7 +69,7 @@ defmodule Sencha.KLine do
     for %Sencha.Repo.KLine{id: id, cidr: cidr, reason: reason} <- klines do
       case cidr |> InetCidr.parse_cidr() do
         {:ok, cidr_parsed} ->
-          :ets.insert(Sencha.KLine.ETS, {cidr_parsed, reason})
+          :ets.insert(Sencha.KLine.ETS, {id, cidr_parsed, reason})
 
         {:error, error} ->
           Logger.warning("K-Line manager invalid entry ##{id} (#{error.message})")
@@ -89,10 +89,10 @@ defmodule Sencha.KLine do
       {:ok, cidr_parsed} ->
         case Sencha.Repo.insert(%Sencha.Repo.KLine{cidr: cidr_string, reason: reason}) do
           {:ok, %Sencha.Repo.KLine{id: id}} ->
-            :ets.insert(Sencha.KLine.ETS, {cidr_parsed, reason})
+            :ets.insert(Sencha.KLine.ETS, {id, cidr_parsed, reason})
 
             for user <- Sencha.Supervisor.User.gather() do
-              Sencha.User.check_kline(user, cidr_parsed, reason)
+              Sencha.User.check_kline(user, cidr_parsed, id, reason)
             end
 
             Logger.info(
@@ -124,9 +124,9 @@ defmodule Sencha.KLine do
     {:reply,
      {:ok,
       :ets.foldl(
-        fn {cidr, reason}, acc ->
+        fn {id, cidr, reason}, acc ->
           if InetCidr.contains?(cidr, ip_address) and is_nil(acc) do
-            reason
+            {id, reason}
           else
             acc
           end
@@ -141,14 +141,12 @@ defmodule Sencha.KLine do
     case Sencha.Repo.get(Sencha.Repo.KLine, id) do
       nil ->
         Logger.warning("K-Line manager failed to remove K-Line ##{id} (it does not exist)")
-        {:noreply, state}
 
       what ->
         case what |> Sencha.Repo.delete() do
           {:ok, %Sencha.Repo.KLine{cidr: cidr_string}} ->
-            cidr_parsed = cidr_string |> InetCidr.parse_cidr!()
-            :ets.take(Sencha.KLine.ETS, cidr_parsed)
-            Logger.info("K-Line manager successfully removed K-Line ##{id}")
+            :ets.take(Sencha.KLine.ETS, id)
+            Logger.info("K-Line manager successfully removed K-Line ##{id} (#{cidr_string})")
 
           {:error, changeset} ->
             for error <- changeset.errors do

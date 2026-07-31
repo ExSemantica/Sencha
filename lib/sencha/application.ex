@@ -24,7 +24,7 @@ defmodule Sencha.Application do
     children = [
       Sencha.Repo,
       Sencha.KLine,
-      Sencha.Supervisor.User,
+      {Sencha.Supervisor.User, max_children: 1},
       {ThousandIsland, port: 6667, handler_module: Sencha.Socket}
     ]
 

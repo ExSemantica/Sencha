@@ -16,14 +16,14 @@ defmodule Sencha.Socket do
   @moduledoc """
   ThousandIsland TCP socket handler
   """
+  require Logger
   use ThousandIsland.Handler
 
-  defstruct [:fsm_process, :authenticated?]
+  defstruct [:fsm_process, :has_hostname?, :pending_data]
 
   # ===========================================================================
   # Public API
   # ===========================================================================
-  @spec disconnect(atom() | pid() | {atom(), any()} | {:via, atom(), any()}, any()) :: :ok
   @doc """
   Disconnect this PID from the IRC server
   """
@@ -39,21 +39,21 @@ defmodule Sencha.Socket do
   end
 
   # ===========================================================================
-  # TCP and GenServer callbacks
+  # TCP callbacks
   # ===========================================================================
   @impl ThousandIsland.Handler
   def handle_connection(socket, _state) do
     {:ok, {peer_ip, _peer_port}} = socket |> ThousandIsland.Socket.peername()
-    {:ok, reason} = peer_ip |> Sencha.KLine.klined?()
+    {:ok, kline} = peer_ip |> Sencha.KLine.klined?()
 
-    case reason do
+    case kline do
       nil ->
         message_send(
           self(),
           %Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :hostname),
             command: "NOTICE",
-            middle: ["AUTH"],
+            middle: ["*"],
             trailing: "Checking your hostname..."
           }
         )
@@ -62,11 +62,70 @@ defmodule Sencha.Socket do
           __MODULE__.ReverseDNS.lookup(peer_ip)
         end)
 
-        {:continue, []}
+        {:continue, %__MODULE__{pending_data: "", has_hostname?: false}}
 
-      reason ->
-        disconnect(self(), "*** Banned (#{reason})")
-        {:continue, []}
+      {id, reason} ->
+        socket |> nongraceful_disconnect("Banned (##{id}) (#{reason})")
+        {:close, %__MODULE__{pending_data: "", has_hostname?: false}}
+    end
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_data(data, _socket, state = %__MODULE__{pending_data: pending_data}) do
+    case data |> String.split("\n", parts: 2, trim: true) do
+      [d0, d1] ->
+        d0 = d0 |> String.replace_suffix("\r", "")
+
+        {:continue, %__MODULE__{state | pending_data: d1},
+         {:continue, {:irc_data, pending_data <> d0}}}
+
+      [d0] ->
+        {:continue, %__MODULE__{state | pending_data: ""},
+         {:continue, {:irc_data, pending_data <> d0}}}
+
+      [] ->
+        {:continue, state}
+    end
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_shutdown(socket, _state) do
+    socket |> nongraceful_disconnect("Server is shutting down")
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
+  def handle_error(_reason, socket, _state) do
+    socket |> nongraceful_disconnect("Server error")
+
+    :ok
+  end
+
+  # ===========================================================================
+  # GenServer callbacks
+  # ===========================================================================
+  @impl GenServer
+  def handle_continue(
+        {:irc_data, data},
+        {socket, state = %__MODULE__{pending_data: pending_data}}
+      ) do
+    # TODO: How should we handle lengthy (>510 bytes) messages here?
+    {:ok, decoded} = data |> Sencha.Message.decode()
+    send(self(), {:message_recv, decoded})
+
+    case pending_data |> String.split("\n", parts: 2, trim: true) do
+      [d0, d1] ->
+        d0 = d0 |> String.replace_suffix("\r", "")
+
+        {:noreply, {socket, %__MODULE__{state | pending_data: d1}},
+         {:continue, {:irc_data, pending_data <> d0}}}
+
+      [d0] ->
+        {:noreply, {socket, %__MODULE__{state | pending_data: pending_data <> d0}}}
+
+      [] ->
+        {:noreply, {socket, %__MODULE__{state | pending_data: ""}}}
     end
   end
 
@@ -76,7 +135,7 @@ defmodule Sencha.Socket do
   end
 
   @impl GenServer
-  def handle_info({rdns_ref, {:lookup, peer_ip, host}}, {socket, []}) do
+  def handle_info({rdns_ref, {:lookup, peer_ip, host}}, {socket, state = %__MODULE__{}}) do
     Process.demonitor(rdns_ref, [:flush])
 
     host =
@@ -87,7 +146,7 @@ defmodule Sencha.Socket do
             %Sencha.Message{
               prefix: Application.fetch_env!(:sencha, :hostname),
               command: "NOTICE",
-              middle: ["AUTH"],
+              middle: ["*"],
               trailing: "Found your hostname"
             }
           )
@@ -100,7 +159,7 @@ defmodule Sencha.Socket do
             %Sencha.Message{
               prefix: Application.fetch_env!(:sencha, :hostname),
               command: "NOTICE",
-              middle: ["AUTH"],
+              middle: ["*"],
               trailing: "Couldn't look up your hostname"
             }
           )
@@ -113,7 +172,7 @@ defmodule Sencha.Socket do
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "NOTICE",
-        middle: ["AUTH"],
+        middle: ["*"],
         trailing: "Your hostname or IP address is " <> host
       }
     )
@@ -126,44 +185,53 @@ defmodule Sencha.Socket do
       {:ok, fsm_process} ->
         Process.link(fsm_process)
 
-        {:noreply,
-         {socket,
-          %__MODULE__{
-            fsm_process: fsm_process,
-            authenticated?: false
-          }}}
+        {:noreply, {socket, %__MODULE__{state | fsm_process: fsm_process, has_hostname?: true}}}
 
       {:error, :max_children} ->
-        disconnect(
-          self(),
-          "Server is over capacity, please try again later"
-        )
+        disconnect(self(), "Server is over capacity, please reconnect later")
 
-        {:stop, :normal, {socket, []}}
+        {:noreply, {socket, state}}
     end
   end
 
   @impl GenServer
+  def handle_info({:message_recv, message}, {socket, state}) do
+    Logger.debug(message)
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
   def handle_cast({:disconnect, reason}, {socket, state}) do
-    host = Application.fetch_env!(:sencha, :hostname)
-
-    # Don't use Erlang messages here because there will be a race condition
-    data =
-      %Sencha.Message{command: "ERROR", trailing: "Closing Link: [#{host}] (#{reason})"}
-      |> Sencha.Message.encode()
-
-    socket |> ThousandIsland.Socket.send(data <> "\r\n")
+    socket |> nongraceful_disconnect(reason)
 
     {:stop, :normal, {socket, state}}
   end
 
   @impl GenServer
   def handle_cast({:message_send, message}, {socket, state}) do
-    data =
+    # TODO: How should we handle lengthy (>510 bytes) messages here?
+    {:ok, data} =
       message
       |> Sencha.Message.encode()
 
     socket |> ThousandIsland.Socket.send(data <> "\r\n")
+
     {:noreply, {socket, state}}
+  end
+
+  # ===========================================================================
+  # Private functions
+  # ===========================================================================
+  # A "dirty" disconnect that is useful in race condition prone spots
+  defp nongraceful_disconnect(socket, reason) do
+    host = Application.fetch_env!(:sencha, :hostname)
+
+    {:ok, data} =
+      %Sencha.Message{command: "ERROR", trailing: "Closing Link: [#{host}] (#{reason})"}
+      |> Sencha.Message.encode()
+
+    socket |> ThousandIsland.Socket.send(data <> "\r\n")
+    socket |> ThousandIsland.Socket.shutdown(:read_write)
   end
 end

@@ -70,8 +70,8 @@ defmodule Sencha.Supervisor.User do
   # Callbacks
   # ===========================================================================
   @impl DynamicSupervisor
-  def init(_init_arg) do
+  def init(max_children: max_children) do
     Logger.info("User state supervisor started")
-    DynamicSupervisor.init(strategy: :one_for_one)
+    DynamicSupervisor.init(max_children: max_children, strategy: :one_for_one)
   end
 end

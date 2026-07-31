@@ -181,15 +181,15 @@ defmodule Sencha.Message do
       check_length_tags(tags) and check_length(message) ->
         # IRCv3 tags and message are sane
         valid = %__MODULE__{} = parse_stage0(message)
-        %__MODULE__{valid | tags: parse_tags(tags)}
+        {:ok, %__MODULE__{valid | tags: parse_tags(tags)}}
 
       check_length(message) ->
         # IRCv3 tags are not sane, message is sane
-        invalid = %__MODULE__{} = parse_stage0(message)
-        %__MODULE__{invalid | tags: :too_many_tags}
+        {:error, :too_many_tags}
 
       true ->
-        nil
+        # Message is not sane
+        {:error, :too_long}
     end
   end
 
@@ -221,17 +221,17 @@ defmodule Sencha.Message do
     |> Enum.map_join(";", &inject_one_tag/1)
   end
 
-  defp check_tags_final(final, "", ""), do: final
+  defp check_tags_final(final, "", ""), do: {:ok, final}
 
   defp check_tags_final(final, tags, "") when check_length_tags(tags),
-    do: "@" <> tags <> " " <> final
+    do: {:ok, "@" <> tags <> " " <> final}
 
   defp check_tags_final(final, "", s_tags) when check_length_tags(s_tags),
-    do: "@" <> s_tags <> " " <> final
+    do: {:ok, "@" <> s_tags <> " " <> final}
 
   defp check_tags_final(final, tags, s_tags)
        when check_length_tags(tags) and check_length_tags(s_tags),
-       do: "@" <> tags <> ";" <> s_tags <> " " <> final
+       do: {:ok, "@" <> tags <> ";" <> s_tags <> " " <> final}
 
   defp check_tags_final(_final, _tags, _s_tags), do: {:error, :too_many_tags}
 
@@ -241,6 +241,8 @@ defmodule Sencha.Message do
 
     final |> check_tags_final(tags_pre, s_tags_pre)
   end
+
+  defp inject_tags(_final, _tags, _s_tags), do: {:error, :too_long}
 
   defp inject_parameters(nil, command, params) when is_nil(params) or params == [] do
     [command]

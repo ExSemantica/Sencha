@@ -33,9 +33,10 @@ defmodule Sencha.User do
   If this user is in the CIDR block, disconnect them
 
   Don't use a CIDR string here, use an `InetCidr` block
+  The ID will be inserted into the ban reason
   """
-  def check_kline(pid, cidr, reason) do
-    GenServer.cast(pid, {:check_kline, cidr, reason})
+  def check_kline(pid, cidr, id, reason) do
+    GenServer.cast(pid, {:check_kline, cidr, id, reason})
   end
 
   # ===========================================================================
@@ -48,7 +49,7 @@ defmodule Sencha.User do
 
   @impl GenServer
   def handle_cast(
-        {:check_kline, cidr, reason},
+        {:check_kline, cidr, id, reason},
         state = %{ip_address: ip_address, socket: socket_pid, target: target}
       ) do
     if InetCidr.contains?(cidr, ip_address) do
@@ -62,7 +63,7 @@ defmodule Sencha.User do
         }
       )
 
-      Sencha.Socket.disconnect(socket_pid, "*** Banned (#{reason})")
+      Sencha.Socket.disconnect(socket_pid, "Banned (##{id}) (#{reason})")
     end
 
     {:noreply, state}
