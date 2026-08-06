@@ -19,6 +19,7 @@ defmodule Sencha.User do
   Unregistered *and* registered users are accounted for, this way
   Originally we needed Mnesia tables to housekeep these counts
   """
+  require Logger
   use GenServer, restart: :temporary
 
   # ===========================================================================
@@ -26,7 +27,16 @@ defmodule Sencha.User do
   # ===========================================================================
   def start_link(socket: socket_pid, ip_address: ip_address, target: target) do
     # At this point we aren't registering the USER/PASS/NICK yet
-    GenServer.start_link(__MODULE__, %{ip_address: ip_address, socket: socket_pid, target: target})
+    GenServer.start_link(__MODULE__, %{
+      user?: false,
+      nick?: false,
+      pass?: false,
+      ip_address: ip_address,
+      socket: socket_pid,
+      target: target,
+      timeout_auth: nil,
+      gecos: nil
+    })
   end
 
   @doc """
@@ -39,12 +49,46 @@ defmodule Sencha.User do
     GenServer.cast(pid, {:check_kline, cidr, id, reason})
   end
 
+  @doc """
+  Handle a `Sencha.Message` asynchronously
+  """
+  def handle_message(pid, message) do
+    GenServer.cast(pid, {:handle_message, message})
+  end
+
   # ===========================================================================
   # Callbacks
   # ===========================================================================
   @impl GenServer
   def init(state) do
-    {:ok, state}
+    {:ok, %{state | timeout_auth: Process.send_after(self(), :timeout_auth, 15_000)}}
+  end
+
+  @impl GenServer
+  def handle_info(:timeout_auth, state = %{socket: socket_pid}) do
+    Sencha.Socket.disconnect(socket_pid, "Authentication timeout")
+
+    {:noreply, state}
+  end
+
+  @impl GenServer
+  def handle_cast(
+        {:handle_message, message = %Sencha.Message{}},
+        state = %{timeout_auth: timeout_auth}
+      ) do
+    Logger.debug(message)
+    state = state |> Sencha.Dispatch.handle(message)
+
+    if !!Process.read_timer(timeout_auth) and state.nick? and state.user? do
+      Process.cancel_timer(timeout_auth)
+
+      # send the welcome burst
+      Sencha.Dispatch.Welcome.send_burst(state)
+
+      # start user ping timers TODO
+    end
+
+    {:noreply, state}
   end
 
   @impl GenServer

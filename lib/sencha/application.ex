@@ -21,10 +21,12 @@ defmodule Sencha.Application do
 
   @impl true
   def start(_type, _args) do
+    Sencha.refresh()
+
     children = [
       Sencha.Repo,
       Sencha.KLine,
-      {Sencha.Supervisor.User, max_children: 1},
+      {Sencha.Supervisor.User, max_children: 1000},
       {ThousandIsland, port: 6667, handler_module: Sencha.Socket}
     ]
 
@@ -32,5 +34,10 @@ defmodule Sencha.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Sencha.Supervisor]
     Supervisor.start_link(children, opts)
+  end
+
+  @impl true
+  def config_change(_changed, _new, _removed) do
+    Sencha.refresh()
   end
 end

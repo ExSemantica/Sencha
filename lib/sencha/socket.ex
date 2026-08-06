@@ -19,7 +19,7 @@ defmodule Sencha.Socket do
   require Logger
   use ThousandIsland.Handler
 
-  defstruct [:fsm_process, :has_hostname?, :pending_data]
+  defstruct [:fsm_process, :has_hostname?, :nick_hash, :message_queue]
 
   # ===========================================================================
   # Public API
@@ -36,6 +36,13 @@ defmodule Sencha.Socket do
   """
   def message_send(pid, message) do
     GenServer.cast(pid, {:message_send, message})
+  end
+
+  @doc """
+  Set nickname hash.
+  """
+  def send_nickname_hash(pid, hash) do
+    GenServer.call(pid, {:send_nickname_hash, hash})
   end
 
   # ===========================================================================
@@ -62,29 +69,41 @@ defmodule Sencha.Socket do
           __MODULE__.ReverseDNS.lookup(peer_ip)
         end)
 
-        {:continue, %__MODULE__{pending_data: "", has_hostname?: false}}
+        {:continue,
+         %__MODULE__{
+           nick_hash: nil,
+           has_hostname?: false,
+           message_queue: :queue.new()
+         }}
 
       {id, reason} ->
         socket |> nongraceful_disconnect("Banned (##{id}) (#{reason})")
-        {:close, %__MODULE__{pending_data: "", has_hostname?: false}}
+
+        {:close,
+         %__MODULE__{
+           nick_hash: nil,
+           has_hostname?: false,
+           message_queue: :queue.new()
+         }}
     end
   end
 
   @impl ThousandIsland.Handler
-  def handle_data(data, _socket, state = %__MODULE__{pending_data: pending_data}) do
-    case data |> String.split("\n", parts: 2, trim: true) do
-      [d0, d1] ->
-        d0 = d0 |> String.replace_suffix("\r", "")
+  def handle_data(data, socket, state = %__MODULE__{message_queue: queue, fsm_process: fsm}) do
+    split = data |> String.split("\r\n", trim: true)
+    qsize = :queue.len(queue)
 
-        {:continue, %__MODULE__{state | pending_data: d1},
-         {:continue, {:irc_data, pending_data <> d0}}}
+    if qsize + length(split) > 10 do
+      socket |> nongraceful_disconnect("Excess flood")
+      {:close, state}
+    else
+      queue = split |> Enum.reduce(queue, fn s, q -> q |> :queue.snoc(s) end)
 
-      [d0] ->
-        {:continue, %__MODULE__{state | pending_data: ""},
-         {:continue, {:irc_data, pending_data <> d0}}}
+      if not is_nil(fsm) and Process.alive?(fsm) do
+        send(self(), :flush)
+      end
 
-      [] ->
-        {:continue, state}
+      {:continue, %__MODULE__{state | message_queue: queue}}
     end
   end
 
@@ -106,36 +125,43 @@ defmodule Sencha.Socket do
   # GenServer callbacks
   # ===========================================================================
   @impl GenServer
-  def handle_continue(
-        {:irc_data, data},
-        {socket, state = %__MODULE__{pending_data: pending_data}}
+  def handle_info(
+        :flush,
+        {socket, state = %__MODULE__{message_queue: message_queue, fsm_process: fsm}}
       ) do
-    # TODO: How should we handle lengthy (>510 bytes) messages here?
-    {:ok, decoded} = data |> Sencha.Message.decode()
-    send(self(), {:message_recv, decoded})
+    if :queue.is_empty(message_queue) do
+      {:noreply, {socket, %{state | message_queue: message_queue}}}
+    else
+      message = message_queue |> :queue.head()
+      {:ok, decoded} = Sencha.Message.decode(message)
+      Sencha.User.handle_message(fsm, decoded)
 
-    case pending_data |> String.split("\n", parts: 2, trim: true) do
-      [d0, d1] ->
-        d0 = d0 |> String.replace_suffix("\r", "")
+      send(self(), :flush)
 
-        {:noreply, {socket, %__MODULE__{state | pending_data: d1}},
-         {:continue, {:irc_data, pending_data <> d0}}}
-
-      [d0] ->
-        {:noreply, {socket, %__MODULE__{state | pending_data: pending_data <> d0}}}
-
-      [] ->
-        {:noreply, {socket, %__MODULE__{state | pending_data: ""}}}
+      {:noreply, {socket, %{state | message_queue: message_queue |> :queue.drop()}}}
     end
   end
 
   @impl GenServer
-  def handle_info({:EXIT, _reason, :normal}, {socket, state}) do
+  def handle_info({:EXIT, _pid, :normal}, {socket, state}) do
     {:noreply, {socket, state}}
   end
 
   @impl GenServer
-  def handle_info({rdns_ref, {:lookup, peer_ip, host}}, {socket, state = %__MODULE__{}}) do
+  def handle_info(
+        {:EXIT, pid, _reason},
+        {socket, state = %__MODULE__{fsm_process: fsm, nick_hash: hash}}
+      )
+      when pid == fsm do
+    :global.unregister_name({Sencha.User, hash})
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(
+        {rdns_ref, {:lookup, peer_ip, host}},
+        {socket, state = %__MODULE__{has_hostname?: false}}
+      ) do
     Process.demonitor(rdns_ref, [:flush])
 
     host =
@@ -185,6 +211,8 @@ defmodule Sencha.Socket do
       {:ok, fsm_process} ->
         Process.link(fsm_process)
 
+        Process.send_after(self(), :flush, 1000)
+
         {:noreply, {socket, %__MODULE__{state | fsm_process: fsm_process, has_hostname?: true}}}
 
       {:error, :max_children} ->
@@ -192,13 +220,6 @@ defmodule Sencha.Socket do
 
         {:noreply, {socket, state}}
     end
-  end
-
-  @impl GenServer
-  def handle_info({:message_recv, message}, {socket, state}) do
-    Logger.debug(message)
-
-    {:noreply, {socket, state}}
   end
 
   @impl GenServer
@@ -218,6 +239,16 @@ defmodule Sencha.Socket do
     socket |> ThousandIsland.Socket.send(data <> "\r\n")
 
     {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_call({:send_nickname_hash, hash}, {pid, _tag}, {socket, state}) do
+    {:reply,
+     case :global.whereis_name({Sencha.User, hash}) do
+       :undefined -> :global.register_name({Sencha.User, hash}, pid)
+       ^pid -> :global.re_register_name({Sencha.User, hash}, pid)
+       _other -> :already_in_use
+     end, {socket, state}}
   end
 
   # ===========================================================================

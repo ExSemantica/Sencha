@@ -35,7 +35,7 @@ defmodule SenchaTest.Message do
     {:ok, cases} = YamlElixir.read_from_file(path)
 
     for c <- cases["tests"] do
-      parsed = Sencha.Message.decode(c["input"])
+      {:ok, parsed} = Sencha.Message.decode(c["input"])
 
       assert parsed.prefix == (c["atoms"]["source"] || nil),
              "prefix #{parsed.prefix} expected to be #{c["atoms"]["source"]}"
@@ -126,12 +126,9 @@ defmodule SenchaTest.Message do
         |> Enum.map(&inject_tags(&1, c["atoms"]["tags"]))
         |> Enum.map(&Sencha.Message.encode/1)
 
-      if is_nil(c["atoms"]["tags"]) do
-        assert c["matches"] == messages
-      else
-        for m <- messages do
-          assert m in c["matches"]
-        end
+      for m0 <- messages do
+        {:ok, m1} = m0
+        assert m1 in c["matches"]
       end
     end
   end

@@ -48,4 +48,20 @@ defmodule Sencha do
     # SEE: RFC 1123
     Regex.match?(@re_hostname, hostname)
   end
+
+  def refresh() do
+    {:ok, head} = :application.get_key(:sencha, :vsn)
+    version =
+      if is_nil(System.get_env("RELEASE_NODE")) do
+        # https://forum.elixirforum.com/t/generating-app-mix-version-directly-from-git-tags/16685/3
+        {sha, 0} =
+          System.cmd("git", ~w[describe --dirty --abbrev=7 --tags --always --first-parent])
+
+        "#{head |> to_string}+#{sha}"
+      else
+        head |> to_string
+      end
+
+    :persistent_term.put(Sencha.Version, version)
+  end
 end
