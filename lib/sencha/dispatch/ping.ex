@@ -1,4 +1,4 @@
-# Configuration for development environments
+# Dispatch IRCv3 command PING
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +12,23 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.Dispatch.Ping do
+  @moduledoc false
+  def handle(state, %Sencha.Message{middle: [token]}) do
+    Sencha.User.message_send(self(), %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "PONG",
+      middle: [token]
+    })
 
-# Change these...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
-  pool_size: 10
+    state
+  end
 
-config :sencha, hostname: "192.168.88.100"
+  def handle(state, %Sencha.Message{middle: []}) do
+    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "PING"})
+  end
 
-config :logger, :default_formatter, format: "$metadata[$level] $message\n", metadata: [:mfa]
+  def handle(state,  _message) do
+    state
+  end
+end

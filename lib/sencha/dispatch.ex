@@ -18,15 +18,23 @@ defmodule Sencha.Dispatch do
   """
   require Logger
 
-  def handle(state, message = %Sencha.Message{command: "USER"}) do
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "USER"}) do
     state |> __MODULE__.User.handle(message)
   end
 
-  def handle(state, message = %Sencha.Message{command: "NICK"}) do
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "NICK"}) do
     state |> __MODULE__.Nick.handle(message)
   end
 
-  def handle(state, _message) do
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "PING"}) do
+    state |> __MODULE__.Ping.handle(message)
+  end
+
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "PONG"}) do
+    state |> __MODULE__.Pong.handle(message)
+  end
+
+  def handle(state = %Sencha.User{}, _message) do
     Logger.warning("Unimplemented IRC command")
     state
   end

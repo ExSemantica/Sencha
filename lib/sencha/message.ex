@@ -28,7 +28,7 @@ defmodule Sencha.Message do
 
   @max_params 14
   @max_bytes_tags 4095
-  @max_bytes 510
+  @max_bytes 511
 
   defguardp nospcrlfcl(c)
             when c in 0x01..0x09 or c in 0x0B..0x0C or c in 0x0E..0x1F or

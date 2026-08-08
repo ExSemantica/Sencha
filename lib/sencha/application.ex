@@ -27,8 +27,8 @@ defmodule Sencha.Application do
     children = [
       Sencha.Repo,
       Sencha.KLine,
-      {Sencha.Supervisor.User, max_children: 1000},
-      {ThousandIsland, port: 6667, handler_module: Sencha.Socket}
+      {ThousandIsland,
+       supervisor_options: [name: Sencha.Supervisor.User], port: 6667, handler_module: Sencha.User}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

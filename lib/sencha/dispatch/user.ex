@@ -23,13 +23,13 @@ defmodule Sencha.Dispatch.User do
     state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "NICK"})
   end
 
-  def handle(state, %Sencha.Message{middle: [ident, _nc0, _nc1], trailing: realname}) do
+  def handle(state = %Sencha.User{target: target}, %Sencha.Message{middle: [ident, _nc0, _nc1], trailing: realname}) do
     cond do
-      is_nil(realname) ->
-        %{state | user?: true} |> put_in([:target, :user], ident)
+      Sencha.Constrain.User.check_ident?(ident) and is_nil(realname) ->
+        %Sencha.User{state | user?: true, target: %{target | user: ident}}
 
       Sencha.Constrain.User.check_ident?(ident) and Sencha.Constrain.User.check_gecos?(realname) ->
-        %{state | user?: true, gecos: realname} |> put_in([:target, :user], ident)
+        %Sencha.User{state | user?: true, gecos: realname, target: %{target | user: ident}}
 
       true ->
         state

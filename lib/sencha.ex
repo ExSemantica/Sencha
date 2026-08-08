@@ -57,7 +57,7 @@ defmodule Sencha do
         {sha, 0} =
           System.cmd("git", ~w[describe --dirty --abbrev=7 --tags --always --first-parent])
 
-        "#{head |> to_string}+#{sha}"
+        "#{head |> to_string}+#{sha |> String.trim_trailing("\n")}"
       else
         head |> to_string
       end

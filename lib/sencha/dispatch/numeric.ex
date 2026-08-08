@@ -25,9 +25,9 @@ defmodule Sencha.Dispatch.Numeric do
   # Replies
   # ===========================================================================
 
-  def send(state = %{socket: socket_pid, target: target}, :RPL_WELCOME, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :RPL_WELCOME, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "001",
@@ -39,9 +39,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :RPL_YOURHOST, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :RPL_YOURHOST, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "002",
@@ -54,24 +54,24 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :RPL_CREATED, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :RPL_CREATED, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "003",
         middle: [target.nickname],
         trailing:
-          "This server was started on #{:persistent_term.get(Sencha.CreationDate) |> DateTime.to_iso8601()}"
+          "This server was started on #{:persistent_term.get(Sencha.CreationDate) |> Calendar.strftime("%c")}"
       }
     )
 
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :RPL_MYINFO, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :RPL_MYINFO, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "004",
@@ -89,12 +89,42 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
+  def send(state = %{target: target}, :RPL_LOCALUSERS, _params) do
+    {:ok, connections} = Sencha.User.gather()
+    connections_num = length(connections)
+    connections_max = :persistent_term.get(Sencha.User.Max, 0)
+    connections_max = max(connections_max, connections_num)
+
+    connections_max =
+      if connections_num > connections_max do
+        :persistent_term.put(Sencha.User.Max, connections_num)
+      else
+        connections_max
+      end
+
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "265",
+        middle: [
+          target.nickname,
+          connections_num |> to_string,
+          connections_max |> to_string
+        ],
+        trailing: "Current local users #{connections_num}, max #{connections_max}"
+      }
+    )
+
+    state
+  end
+
   # ===========================================================================
   # Errors
   # ===========================================================================
-  def send(state = %{socket: socket_pid, target: target}, :ERR_NONICKNAMEGIVEN, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_NONICKNAMEGIVEN, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "431",
@@ -106,9 +136,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :ERR_ERRONEOUSNICKNAME, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_ERRONEOUSNICKNAME, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "432",
@@ -120,9 +150,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :ERR_NICKNAMEINUSE, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_NICKNAMEINUSE, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "433",
@@ -134,9 +164,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :ERR_NEEDMOREPARAMS, %{command: command}) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_NEEDMOREPARAMS, %{command: command}) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "461",
@@ -148,9 +178,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :ERR_ALREADYREGISTERED, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_ALREADYREGISTERED, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "462",
@@ -162,9 +192,9 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{socket: socket_pid, target: target}, :ERR_YOUREBANNEDCREEP, _params) do
-    Sencha.Socket.message_send(
-      socket_pid,
+  def send(state = %{target: target}, :ERR_YOUREBANNEDCREEP, _params) do
+    Sencha.User.message_send(
+      self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "465",

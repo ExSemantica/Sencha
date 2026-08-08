@@ -91,7 +91,9 @@ defmodule Sencha.KLine do
           {:ok, %Sencha.Repo.KLine{id: id}} ->
             :ets.insert(Sencha.KLine.ETS, {id, cidr_parsed, reason})
 
-            for user <- Sencha.Supervisor.User.gather() do
+            {:ok, connections} = Sencha.User.gather()
+
+            for user <- connections do
               Sencha.User.check_kline(user, cidr_parsed, id, reason)
             end
 
