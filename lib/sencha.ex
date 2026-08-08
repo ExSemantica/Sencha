@@ -64,4 +64,8 @@ defmodule Sencha do
 
     :persistent_term.put(Sencha.Version, version)
   end
+
+  def init_creation_date() do
+    :persistent_term.put(Sencha.CreationDate, DateTime.utc_now())
+  end
 end

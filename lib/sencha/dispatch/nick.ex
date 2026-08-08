@@ -25,6 +25,7 @@ defmodule Sencha.Dispatch.Nick do
       # NOTE: We send a lowercase version of the nickname as the hash
       # Therefore, we make it *case-insensitive*
       previous_nick = target[:nickname]
+
       case Sencha.Socket.send_nickname_hash(socket_pid, nick_hash) do
         :yes when is_nil(previous_nick) ->
           %{state | nick?: true} |> put_in([:target, :nickname], nick)
@@ -35,54 +36,25 @@ defmodule Sencha.Dispatch.Nick do
             %Sencha.Message{
               prefix: target |> Sencha.Prefix.encode(),
               command: "NICK",
-              middle: nick,
+              middle: nick
             }
           )
+
           %{state | nick?: true} |> put_in([:target, :nickname], nick)
 
         :already_in_use ->
-          Sencha.Socket.message_send(
-            socket_pid,
-            %Sencha.Message{
-              prefix: Application.fetch_env!(:sencha, :hostname),
-              command: "433",
-              middle: [target[:nickname] || "*"],
-              trailing: "Nickname already in use"
-            }
-          )
-
-          state
+          state |> Sencha.Dispatch.Numeric.send(:ERR_NICKNAMEINUSE)
       end
     else
-      Sencha.Socket.message_send(
-        socket_pid,
-        %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :hostname),
-          command: "432",
-          middle: [target[:nickname] || "*"],
-          trailing: "Erroneous nickname"
-        }
-      )
-
-      state
+      state |> Sencha.Dispatch.Numeric.send(:ERR_ERRONEOUSNICKNAME)
     end
   end
 
   def handle(
-        state = %{socket: socket_pid, target: target},
+        state,
         %Sencha.Message{middle: []}
       ) do
-    Sencha.Socket.message_send(
-      socket_pid,
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "431",
-        middle: [target[:nickname] || "*"],
-        trailing: "No nickname given"
-      }
-    )
-
-    state
+    state |> Sencha.Dispatch.Numeric.send(:ERR_NONICKNAMEGIVEN)
   end
 
   def handle(state, _message) do

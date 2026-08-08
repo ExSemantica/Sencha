@@ -14,28 +14,11 @@
 # limitations under the License.
 defmodule Sencha.Dispatch.Welcome do
   @moduledoc false
-  def send_burst(state = %{socket: socket_pid, target: target}) do
-    Sencha.Socket.message_send(
-      socket_pid,
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "001",
-        middle: [target.nickname],
-        trailing: "Welcome, #{target |> Sencha.Prefix.encode()}"
-      }
-    )
-
-    Sencha.Socket.message_send(
-      socket_pid,
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "002",
-        middle: [target.nickname],
-        trailing:
-          "Your host is #{Application.fetch_env!(:sencha, :hostname)} running Sencha IRC #{:persistent_term.get(Sencha.Version)}"
-      }
-    )
-
+  def send_burst(state) do
     state
+    |> Sencha.Dispatch.Numeric.send(:RPL_WELCOME)
+    |> Sencha.Dispatch.Numeric.send(:RPL_YOURHOST)
+    |> Sencha.Dispatch.Numeric.send(:RPL_CREATED)
+    |> Sencha.Dispatch.Numeric.send(:RPL_MYINFO)
   end
 end

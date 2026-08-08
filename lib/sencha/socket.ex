@@ -16,7 +16,6 @@ defmodule Sencha.Socket do
   @moduledoc """
   ThousandIsland TCP socket handler
   """
-  require Logger
   use ThousandIsland.Handler
 
   defstruct [:fsm_process, :has_hostname?, :nick_hash, :message_queue]
@@ -153,6 +152,7 @@ defmodule Sencha.Socket do
         {socket, state = %__MODULE__{fsm_process: fsm, nick_hash: hash}}
       )
       when pid == fsm do
+    # When the state machine process exits, the IRC session is over
     :global.unregister_name({Sencha.User, hash})
     {:noreply, {socket, state}}
   end

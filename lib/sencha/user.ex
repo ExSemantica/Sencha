@@ -40,6 +40,18 @@ defmodule Sencha.User do
   end
 
   @doc """
+  All user mode characters that can be set by an non-operator
+  """
+  def modes(), do: MapSet.new(~c(i))
+
+  @doc """
+  All user mode characters supported
+
+  Not all can be set by a non-operator
+  """
+  def modes_all(), do: MapSet.new(~c(o)) |> MapSet.union(modes())
+
+  @doc """
   If this user is in the CIDR block, disconnect them
 
   Don't use a CIDR string here, use an `InetCidr` block
@@ -94,19 +106,10 @@ defmodule Sencha.User do
   @impl GenServer
   def handle_cast(
         {:check_kline, cidr, id, reason},
-        state = %{ip_address: ip_address, socket: socket_pid, target: target}
+        state = %{ip_address: ip_address, socket: socket_pid}
       ) do
     if InetCidr.contains?(cidr, ip_address) do
-      Sencha.Socket.message_send(
-        socket_pid,
-        %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :hostname),
-          command: "465",
-          middle: [target[:nickname] || "*"],
-          trailing: "You have been banned from this IRC server"
-        }
-      )
-
+      state |> Sencha.Dispatch.Numeric.send(:ERR_YOUREBANNEDCREEP)
       Sencha.Socket.disconnect(socket_pid, "Banned (##{id}) (#{reason})")
     end
 

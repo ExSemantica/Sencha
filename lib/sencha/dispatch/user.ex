@@ -14,33 +14,13 @@
 # limitations under the License.
 defmodule Sencha.Dispatch.User do
   @moduledoc false
-  def handle(state = %{user?: true, socket: socket_pid, target: target}, _message) do
-    Sencha.Socket.message_send(
-      socket_pid,
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "462",
-        middle: [target[:nickname] || "*"],
-        trailing: "You may not re-register"
-      }
-    )
-
-    state
+  def handle(state = %{user?: true}, _message) do
+    state |> Sencha.Dispatch.Numeric.send(:ERR_ALREADYREGISTERED)
   end
 
-  def handle(state = %{socket: socket_pid, target: target}, message = %Sencha.Message{})
+  def handle(state, message = %Sencha.Message{})
       when length(message.middle) < 3 do
-    Sencha.Socket.message_send(
-      socket_pid,
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "461",
-        middle: [target[:nickname] || "*", "USER"],
-        trailing: "Not enough parameters"
-      }
-    )
-
-    state
+    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "NICK"})
   end
 
   def handle(state, %Sencha.Message{middle: [ident, _nc0, _nc1], trailing: realname}) do

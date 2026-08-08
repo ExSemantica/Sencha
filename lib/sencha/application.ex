@@ -21,6 +21,7 @@ defmodule Sencha.Application do
 
   @impl true
   def start(_type, _args) do
+    Sencha.init_creation_date()
     Sencha.refresh()
 
     children = [
