@@ -15,5 +15,6 @@
 import Config
 
 config :sencha, ecto_repos: [Sencha.Repo]
+# config :sencha, network_name: "Sencha"
 
 import_config "#{config_env()}.exs"

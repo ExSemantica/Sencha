@@ -43,7 +43,7 @@ defmodule Sencha.User do
   @doc """
   All user mode characters that can be set by an non-operator
   """
-  def modes(), do: MapSet.new(~c(i))
+  def modes(), do: MapSet.new(~c(wi))
 
   @doc """
   All user mode characters supported

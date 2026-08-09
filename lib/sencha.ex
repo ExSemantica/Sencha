@@ -16,6 +16,7 @@ defmodule Sencha do
   @moduledoc """
   Documentation for `Sencha`.
   """
+  require Logger
 
   @re_hostname ~r/^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$/
 
@@ -49,8 +50,9 @@ defmodule Sencha do
     Regex.match?(@re_hostname, hostname)
   end
 
-  def refresh() do
+  def refresh_version do
     {:ok, head} = :application.get_key(:sencha, :vsn)
+
     version =
       if is_nil(System.get_env("RELEASE_NODE")) do
         # https://forum.elixirforum.com/t/generating-app-mix-version-directly-from-git-tags/16685/3
@@ -65,7 +67,28 @@ defmodule Sencha do
     :persistent_term.put(Sencha.Version, version)
   end
 
-  def init_creation_date() do
+  def init_creation_date do
     :persistent_term.put(Sencha.CreationDate, DateTime.utc_now())
+  end
+
+  def rehash do
+    motd_path = Path.join(["data", "motd.txt"])
+
+    case File.read(motd_path) do
+      {:ok, motd} ->
+        :persistent_term.put(
+          Sencha.MOTD,
+          motd
+          |> String.split("\n")
+        )
+
+        Logger.info("Rehashed MOTD at '#{motd_path}'")
+
+      {:error, error} ->
+        :persistent_term.erase(Sencha.MOTD)
+
+        Logger.warning("Could not rehash MOTD at '#{motd_path}'")
+        Logger.warning(error)
+    end
   end
 end

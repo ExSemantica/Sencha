@@ -22,7 +22,8 @@ defmodule Sencha.Application do
   @impl true
   def start(_type, _args) do
     Sencha.init_creation_date()
-    Sencha.refresh()
+    Sencha.refresh_version()
+    Sencha.rehash()
 
     children = [
       Sencha.Repo,
@@ -39,6 +40,6 @@ defmodule Sencha.Application do
 
   @impl true
   def config_change(_changed, _new, _removed) do
-    Sencha.refresh()
+    Sencha.refresh_version()
   end
 end

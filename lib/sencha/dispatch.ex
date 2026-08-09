@@ -34,6 +34,14 @@ defmodule Sencha.Dispatch do
     state |> __MODULE__.Pong.handle(message)
   end
 
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "LUSERS"}) do
+    state |> __MODULE__.Lusers.handle(message)
+  end
+
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "MOTD"}) do
+    state |> __MODULE__.Motd.handle(message)
+  end
+
   def handle(state = %Sencha.User{}, _message) do
     Logger.warning("Unimplemented IRC command")
     state

@@ -80,8 +80,11 @@ defmodule Sencha.Dispatch.Numeric do
           Application.fetch_env!(:sencha, :hostname),
           :persistent_term.get(Sencha.Version),
           Sencha.User.modes_all() |> MapSet.to_list() |> to_string,
-          Sencha.Channel.modes_noparam_all() |> MapSet.to_list() |> to_string,
-          Sencha.Channel.modes_param_all() |> MapSet.to_list() |> to_string
+          Sencha.Channel.modes(?d) |> MapSet.to_list() |> to_string,
+          ?a..?c
+          |> Enum.reduce(MapSet.new(), &MapSet.union(&2, Sencha.Channel.modes(&1)))
+          |> MapSet.to_list()
+          |> to_string
         ]
       }
     )
@@ -89,30 +92,116 @@ defmodule Sencha.Dispatch.Numeric do
     state
   end
 
-  def send(state = %{target: target}, :RPL_LOCALUSERS, _params) do
-    {:ok, connections} = Sencha.User.gather()
-    connections_num = length(connections)
-    connections_max = :persistent_term.get(Sencha.User.Max, 0)
-    connections_max = max(connections_max, connections_num)
+  def send(state = %{target: target}, :RPL_ISUPPORT, _params) do
+    supported =
+      Sencha.ISupport.get()
+      |> Enum.chunk_every(13)
 
-    connections_max =
-      if connections_num > connections_max do
-        :persistent_term.put(Sencha.User.Max, connections_num)
-      else
-        connections_max
-      end
+    for features <- supported do
+      Sencha.User.message_send(
+        self(),
+        %Sencha.Message{
+          prefix: Application.fetch_env!(:sencha, :hostname),
+          command: "005",
+          middle: [
+            target.nickname
+            | features
+          ],
+          trailing: "are supported by this server"
+        }
+      )
+    end
+
+    state
+  end
+
+  def send(state = %{target: target}, :RPL_LUSERCLIENT, _params) do
+    connections_num =
+      length(
+        :global.registered_names()
+        |> Enum.filter(fn {type, _pid} -> type == Sencha.User end)
+      )
+
+    nodes_num = length([node() | Node.list()])
 
     Sencha.User.message_send(
       self(),
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "265",
+        command: "251",
         middle: [
-          target.nickname,
-          connections_num |> to_string,
-          connections_max |> to_string
+          target.nickname
         ],
-        trailing: "Current local users #{connections_num}, max #{connections_max}"
+        # TODO: invisibility
+        trailing: "There are #{connections_num} users and 0 invisible on #{nodes_num} servers"
+      }
+    )
+
+    state
+  end
+
+  def send(state = %{target: target}, :RPL_LUSERME, _params) do
+    {:ok, connections} = Sencha.User.gather()
+    connections_num = length(connections)
+    nodes_num = length([node() | Node.list()])
+
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "255",
+        middle: [
+          target.nickname
+        ],
+        trailing: "I have #{connections_num} clients and #{nodes_num} servers"
+      }
+    )
+
+    state
+  end
+
+  def send(state = %{target: target}, :RPL_MOTD, %{line: line}) do
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "372",
+        middle: [
+          target.nickname
+        ],
+        trailing: line
+      }
+    )
+
+    state
+  end
+
+  def send(state = %{target: target}, :RPL_MOTDSTART, _params) do
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "375",
+        middle: [
+          target.nickname
+        ],
+        trailing: "- #{Application.fetch_env!(:sencha, :hostname)} Message of the Day -"
+      }
+    )
+
+    state
+  end
+
+  def send(state = %{target: target}, :RPL_ENDOFMOTD, _params) do
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "376",
+        middle: [
+          target.nickname
+        ],
+        trailing: "End of /MOTD command"
       }
     )
 
@@ -122,6 +211,20 @@ defmodule Sencha.Dispatch.Numeric do
   # ===========================================================================
   # Errors
   # ===========================================================================
+  def send(state = %{target: target}, :ERR_NOMOTD, _params) do
+    Sencha.User.message_send(
+      self(),
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "422",
+        middle: [target[:nickname] || "*"],
+        trailing: "MOTD file is missing"
+      }
+    )
+
+    state
+  end
+
   def send(state = %{target: target}, :ERR_NONICKNAMEGIVEN, _params) do
     Sencha.User.message_send(
       self(),

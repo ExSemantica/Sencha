@@ -16,27 +16,12 @@ defmodule Sencha.Channel do
   @moduledoc """
   Channel state
   """
-  @doc """
-  All channel mode characters that can be set by a channel operator
-  """
-  def modes_noparam(), do: MapSet.new(~c(s))
 
   @doc """
-  All channel mode characters that are parametered and settable by a channel operator
+  SEE: https://modern.ircdocs.horse/#mode-message
   """
-  def modes_param(), do: MapSet.new(~c(b))
-
-  @doc """
-  All channel mode characters supported
-
-  Not all can be set by a channel operator
-  """
-  def modes_noparam_all(), do: MapSet.new(~c()) |> MapSet.union(modes_noparam())
-
-  @doc """
-  All channel mode characters that are parametered and supported
-
-  Not all can be set by a channel operator
-  """
-  def modes_param_all(), do: MapSet.new(~c()) |> MapSet.union(modes_param())
+  def modes(?a), do: MapSet.new(~c(b))
+  def modes(?b), do: MapSet.new(~c(k))
+  def modes(?c), do: MapSet.new(~c())
+  def modes(?d), do: MapSet.new(~c(s))
 end

@@ -25,14 +25,20 @@ defmodule Sencha.Dispatch.Nick do
       # NOTE: We send a lowercase version of the nickname as the hash
       # Therefore, we make it *case-insensitive*
       previous_nick = target[:nickname]
+      previous_nick_hash = String.downcase(target[:nickname] || nick)
 
       pid = self()
 
       hash_ok? =
-        case :global.whereis_name({Sencha.User, nick_hash}) do
-          :undefined -> :global.register_name({Sencha.User, nick_hash}, pid)
-          ^pid -> :global.re_register_name({Sencha.User, nick_hash}, pid)
-          _other -> :already_in_use
+        case :global.whereis_name({Sencha.User, previous_nick_hash}) do
+          :undefined ->
+            :global.register_name({Sencha.User, nick_hash}, pid)
+
+          ^pid ->
+            :global.re_register_name({Sencha.User, nick_hash}, pid)
+
+          _other ->
+            :already_in_use
         end
 
       case hash_ok? do

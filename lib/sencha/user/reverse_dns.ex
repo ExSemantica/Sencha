@@ -28,7 +28,13 @@ defmodule Sencha.User.ReverseDNS do
      case :inet_res.gethostbyaddr(addr) do
        {:ok, hostent} ->
          {:hostent, h_name, _, _, _, _} = hostent
-         {:ok, h_name |> to_string}
+         host = h_name |> to_string()
+
+         if byte_size(host) > Sencha.Constrain.User.max_length_host() do
+           {:error, :too_long}
+         else
+           {:ok, h_name |> to_string}
+         end
 
        {:error, reason} ->
          {:error, reason}

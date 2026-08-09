@@ -21,9 +21,13 @@ defmodule Sencha.Constrain.Channel do
   @regex ~r/^\#+[a-zA-Z\[\\\]\^\_\{\|\}][a-zA-Z0-9\[\\\]\^\_\-\{\|\}]*$/
   @max_length_name 31
   @max_length_topic 255
+  @max_length_kick 127
+  @max_variable_modes 3
 
   def max_length_name(), do: @max_length_name
   def max_length_topic(), do: @max_length_topic
+  def max_length_kick(), do: @max_length_kick
+  def max_variable_modes(), do: @max_variable_modes
   def supported_prefixes(), do: [?\#]
 
   @doc """
