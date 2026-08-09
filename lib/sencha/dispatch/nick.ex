@@ -14,8 +14,10 @@
 # limitations under the License.
 defmodule Sencha.Dispatch.Nick do
   @moduledoc false
+  require Logger
+
   def handle(
-        state = %Sencha.User{target: target},
+        state = %Sencha.User{target: target, capabilities: caps_state},
         %Sencha.Message{middle: [nick]}
       ) do
     nick_ok? = Sencha.Constrain.User.check_name?(nick)
@@ -42,8 +44,22 @@ defmodule Sencha.Dispatch.Nick do
         end
 
       case hash_ok? do
+        :yes when is_nil(previous_nick) and caps_state == :wait_for_caps ->
+          Logger.debug("Will ignore CAP handshake due to premature recv of NICK")
+
+          %Sencha.User{
+            state
+            | nick?: true,
+              capabilities: :ignore,
+              target: %{target | nickname: nick}
+          }
+
         :yes when is_nil(previous_nick) ->
-          %Sencha.User{state | nick?: true, target: %{target | nickname: nick}}
+          %Sencha.User{
+            state
+            | nick?: true,
+              target: %{target | nickname: nick}
+          }
 
         :yes ->
           Sencha.User.message_send(
@@ -58,48 +74,18 @@ defmodule Sencha.Dispatch.Nick do
           %{state | nick?: true, target: %{target | nickname: nick}}
 
         :already_in_use ->
-          Sencha.User.message_send(
-            self(),
-            %Sencha.Message{
-              prefix: Application.fetch_env!(:sencha, :hostname),
-              command: "433",
-              middle: [target[:nickname] || "*"],
-              trailing: "Nickname already in use"
-            }
-          )
-
-          state
+          state |> Sencha.Dispatch.Numeric.send(:ERR_NICKNAMEINUSE)
       end
     else
-      Sencha.User.message_send(
-        self(),
-        %Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :hostname),
-          command: "432",
-          middle: [target[:nickname] || "*"],
-          trailing: "Erroneous nickname"
-        }
-      )
-
-      state
+      state |> Sencha.Dispatch.Numeric.send(:ERR_ERRONEOUSNICKNAME)
     end
   end
 
   def handle(
-        state = %Sencha.User{target: target},
+        state,
         %Sencha.Message{middle: []}
       ) do
-    Sencha.User.message_send(
-      self(),
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "431",
-        middle: [target[:nickname] || "*"],
-        trailing: "No nickname given"
-      }
-    )
-
-    state
+    state |> Sencha.Dispatch.Numeric.send(:ERR_NONICKNAMEGIVEN)
   end
 
   def handle(state, _message) do

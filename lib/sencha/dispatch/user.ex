@@ -14,16 +14,31 @@
 # limitations under the License.
 defmodule Sencha.Dispatch.User do
   @moduledoc false
+  require Logger
+
   def handle(state = %{user?: true}, _message) do
     state |> Sencha.Dispatch.Numeric.send(:ERR_ALREADYREGISTERED)
   end
 
   def handle(state, message = %Sencha.Message{})
       when length(message.middle) < 3 do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "NICK"})
+    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "USER"})
   end
 
-  def handle(state = %Sencha.User{target: target}, %Sencha.Message{middle: [ident, _nc0, _nc1], trailing: realname}) do
+  def handle(state = %Sencha.User{target: target, capabilities: caps_state}, %Sencha.Message{
+        middle: [ident, _nc0, _nc1],
+        trailing: realname
+      }) do
+    state =
+      case caps_state do
+        :wait_for_caps ->
+          Logger.debug("Will ignore CAP handshake due to premature recv of USER")
+          %Sencha.User{state | capabilities: :ignore}
+
+        _other ->
+          state
+      end
+
     cond do
       Sencha.Constrain.User.check_ident?(ident) and is_nil(realname) ->
         %Sencha.User{state | user?: true, target: %{target | user: ident}}

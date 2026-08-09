@@ -30,7 +30,8 @@ defmodule Sencha.User do
     :timeout_ping_soft,
     :timeout_ping_hard,
     :last_token,
-    :gecos
+    :gecos,
+    :capabilities
   ]
 
   @max_connections 250
@@ -119,7 +120,7 @@ defmodule Sencha.User do
         end)
 
         # NOTE: ThousandIsland disconnects clients within a minute by default
-        # Set a persistent and infinite timeout because `Sencha.User` handles
+        # Set a persistent, infinite timeout because `Sencha.User` handles
         # this all for us.
         {:continue,
          %__MODULE__{
@@ -128,7 +129,8 @@ defmodule Sencha.User do
            message_queue: :queue.new(),
            queue_flood_count: 0,
            nick?: false,
-           user?: false
+           user?: false,
+           capabilities: :wait_for_caps
          }, {:persistent, :infinity}}
 
       {id, reason} ->
@@ -402,26 +404,46 @@ defmodule Sencha.User do
     socket |> ThousandIsland.Socket.shutdown(:read_write)
   end
 
-  defp message_recv(state = %__MODULE__{timeout_auth: timeout_auth}, message) do
+  defp message_recv(
+         state = %__MODULE__{timeout_auth: timeout_auth},
+         message
+       ) do
     Logger.debug(message)
-    state = %Sencha.User{nick?: nick?, user?: user?} = state |> Sencha.Dispatch.handle(message)
+    state = %__MODULE__{nick?: nick?, user?: user?, capabilities: caps_state} = state |> Sencha.Dispatch.handle(message)
 
-    if !!Process.read_timer(timeout_auth) and nick? and user? do
-      Process.cancel_timer(timeout_auth)
+    caps? =
+      case caps_state do
+        :wait_for_caps ->
+          false
 
-      # send the welcome burst
-      state |> Sencha.Dispatch.Welcome.send_burst()
+        {:stall_for_caps, _which} ->
+          false
 
-      # send soft and hard pings
-      # soft one will ping and hard one will disconnect
-      %__MODULE__{
+        :ignore ->
+          true
+
+        {:ok, _caps} ->
+          true
+      end
+
+    cond do
+      !!Process.read_timer(timeout_auth) and nick? and user? and caps? ->
+        Process.cancel_timer(timeout_auth)
+
+        # send the welcome burst
+        state |> Sencha.Dispatch.Welcome.send_burst()
+
+        # send soft and hard pings
+        # soft one will ping and hard one will disconnect
+        %__MODULE__{
+          state
+          | last_token: DateTime.utc_now() |> DateTime.to_unix(),
+            timeout_ping_soft: Process.send_after(self(), :ping_soft, @ping_soft_milliseconds),
+            timeout_ping_hard: Process.send_after(self(), :ping_hard, @ping_hard_milliseconds)
+        }
+
+      true ->
         state
-        | last_token: DateTime.utc_now() |> DateTime.to_unix(),
-          timeout_ping_soft: Process.send_after(self(), :ping_soft, @ping_soft_milliseconds),
-          timeout_ping_hard: Process.send_after(self(), :ping_hard, @ping_hard_milliseconds)
-      }
-    else
-      state
     end
   end
 end

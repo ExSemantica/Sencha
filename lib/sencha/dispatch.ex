@@ -42,6 +42,10 @@ defmodule Sencha.Dispatch do
     state |> __MODULE__.Motd.handle(message)
   end
 
+  def handle(state = %Sencha.User{}, message = %Sencha.Message{command: "CAP"}) do
+    state |> __MODULE__.Cap.handle(message)
+  end
+
   def handle(state = %Sencha.User{}, _message) do
     Logger.warning("Unimplemented IRC command")
     state
