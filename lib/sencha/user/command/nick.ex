@@ -12,12 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Nick do
+defmodule Sencha.User.Command.Nick do
   @moduledoc false
   require Logger
 
   def handle(
         state = %Sencha.User{target: target, capabilities: caps_state},
+        socket,
         %Sencha.Message{middle: [nick]}
       ) do
     nick_ok? = Sencha.Constrain.User.check_name?(nick)
@@ -63,7 +64,7 @@ defmodule Sencha.Dispatch.Nick do
 
         :yes ->
           Sencha.User.message_send(
-            self(),
+            socket,
             %Sencha.Message{
               prefix: target |> Sencha.Prefix.encode(),
               command: "NICK",
@@ -74,21 +75,37 @@ defmodule Sencha.Dispatch.Nick do
           %{state | nick?: true, target: %{target | nickname: nick}}
 
         :already_in_use ->
-          state |> Sencha.Dispatch.Numeric.send(:ERR_NICKNAMEINUSE)
+          Sencha.User.message_send(
+            socket,
+            Sencha.User.Numeric.encode(:ERR_NICKNAMEINUSE, state.target)
+          )
+
+          state
       end
     else
-      state |> Sencha.Dispatch.Numeric.send(:ERR_ERRONEOUSNICKNAME)
+      Sencha.User.message_send(
+        socket,
+        Sencha.User.Numeric.encode(:ERR_ERRONEOUSNICKNAME, state.target)
+      )
+
+      state
     end
   end
 
   def handle(
         state,
+        socket,
         %Sencha.Message{middle: []}
       ) do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_NONICKNAMEGIVEN)
+    Sencha.User.message_send(
+      socket,
+      Sencha.User.Numeric.encode(:ERR_NONICKNAMEGIVEN, state.target)
+    )
+
+    state
   end
 
-  def handle(state, _message) do
+  def handle(state, _socket, _message) do
     state
   end
 end

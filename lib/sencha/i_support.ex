@@ -24,20 +24,20 @@ defmodule Sencha.ISupport do
       "CASEMAPPING=ascii",
       # TODO: CHANLIMIT
       "CHANMODES=#{?a..?d |> Enum.map(&(Sencha.Channel.modes(&1) |> MapSet.to_list())) |> Enum.intersperse(",") |> to_string}",
-      "CHANNELLEN=#{Sencha.Constrain.Channel.max_length_name}",
+      "CHANNELLEN=#{Sencha.Constrain.Channel.max_length_name()}",
       "CHANTYPES=#{Sencha.Constrain.Channel.supported_prefixes() |> Enum.join()}",
       # TODO: ELIST, EXCEPTS, EXTBAN
-      "HOSTLEN=#{Sencha.Constrain.User.max_length_host}",
+      "HOSTLEN=#{Sencha.Constrain.User.max_length_host()}",
       # TODO: INVEX
-      "KICKLEN=#{Sencha.Constrain.Channel.max_length_kick}",
+      "KICKLEN=#{Sencha.Constrain.Channel.max_length_kick()}",
       # TODO: MAXLIST, MAXTARGETS
-      "MODES=#{Sencha.Constrain.Channel.max_variable_modes}",
+      "MODES=#{Sencha.Constrain.Channel.max_variable_modes()}",
       "NETWORK=#{Application.get_env(:sencha, :network_name, "Sencha")}",
-      "NICKLEN=#{Sencha.Constrain.User.max_length_name}",
+      "NICKLEN=#{Sencha.Constrain.User.max_length_name()}",
       "PREFIX=(ov)@+",
       # TODO: SAFELIST, SILENCE, STATUSMSG, TARGMAX
-      "TOPICLEN=#{Sencha.Constrain.Channel.max_length_topic}",
-      "USERLEN=#{Sencha.Constrain.User.max_length_ident}",
+      "TOPICLEN=#{Sencha.Constrain.Channel.max_length_topic()}",
+      "USERLEN=#{Sencha.Constrain.User.max_length_ident()}"
     ]
   end
 end

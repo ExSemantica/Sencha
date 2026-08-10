@@ -12,23 +12,37 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.User do
+defmodule Sencha.User.Command.User do
   @moduledoc false
   require Logger
 
-  def handle(state = %{user?: true}, _message) do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_ALREADYREGISTERED)
+  def handle(state = %{user?: true}, socket, _message) do
+    Sencha.User.message_send(
+      socket,
+      Sencha.User.Numeric.encode(:ERR_ALREADYREGISTERED, state.target)
+    )
+
+    state
   end
 
-  def handle(state, message = %Sencha.Message{})
+  def handle(state, socket, message)
       when length(message.middle) < 3 do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "USER"})
+    Sencha.User.message_send(
+      socket,
+      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, state.target, %{command: "USER"})
+    )
+
+    state
   end
 
-  def handle(state = %Sencha.User{target: target, capabilities: caps_state}, %Sencha.Message{
-        middle: [ident, _nc0, _nc1],
-        trailing: realname
-      }) do
+  def handle(
+        state = %Sencha.User{target: target, capabilities: caps_state},
+        _socket,
+        %Sencha.Message{
+          middle: [ident, _nc0, _nc1],
+          trailing: realname
+        }
+      ) do
     state =
       case caps_state do
         :wait_for_caps ->
@@ -51,15 +65,15 @@ defmodule Sencha.Dispatch.User do
     end
   end
 
-  def handle(state, message = %Sencha.Message{middle: [ident, nc0, nc1 | realname]}) do
-    handle(state, %Sencha.Message{
+  def handle(state, socket, message = %Sencha.Message{middle: [ident, nc0, nc1 | realname]}) do
+    handle(state, socket, %Sencha.Message{
       message
       | middle: [ident, nc0, nc1],
         trailing: realname |> Enum.join(" ")
     })
   end
 
-  def handle(state, _message) do
+  def handle(state, _socket, _message) do
     state
   end
 end

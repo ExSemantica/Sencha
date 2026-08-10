@@ -31,7 +31,8 @@ defmodule Sencha.User do
     :timeout_ping_hard,
     :last_token,
     :gecos,
-    :capabilities
+    :capabilities,
+    :channel_hashes
   ]
 
   @max_connections 250
@@ -40,6 +41,16 @@ defmodule Sencha.User do
   @ping_hard_milliseconds 120_000
   @flood_amount 5
   @flood_milliseconds 1_000
+
+  @doc """
+  Interval in milliseconds to issue a ping
+  """
+  def ping_soft(), do: @ping_soft_milliseconds
+
+  @doc """
+  Interval in milliseconds to timeout for a missed ping
+  """
+  def ping_hard(), do: @ping_hard_milliseconds
 
   @doc """
   All user mode characters that can be set by an non-operator
@@ -57,18 +68,41 @@ defmodule Sencha.User do
   # Public API
   # ===========================================================================
   @doc """
-  Disconnect this PID from the IRC server
+  Sends a `Sencha.Message` when the socket is known
   """
-  def disconnect(pid, reason) do
-    GenServer.cast(pid, {:disconnect, reason})
+  def message_send(socket, message) do
+    # TODO: How should we handle lengthy (>510 bytes) messages here?
+    {:ok, data} =
+      message
+      |> Sencha.Message.encode()
+
+    Logger.debug(message)
+
+    socket |> ThousandIsland.Socket.send(data <> "\r\n")
+
+    socket
   end
 
   @doc """
-  Sends a `Sencha.Message`
+  Sends a `Sencha.Message` if only the username is known
   """
-  def message_send(pid, message) do
-    Logger.debug(message)
-    GenServer.cast(pid, {:message_send, message})
+  def remote_send(message, user_hash) do
+    :global.send({__MODULE__, user_hash}, {:remote_send, message})
+  end
+
+  @doc """
+  Disconnect this username from the IRC server
+  """
+  def remote_disconnect(user_hash, reason) do
+    Logger.debug("Remote attempting to disconnect '#{user_hash}': #{reason}")
+    :global.send({__MODULE__, user_hash}, {:disconnect, reason})
+  end
+
+  @doc """
+  Disconnect yourself from the IRC server
+  """
+  def local_disconnect(reason) do
+    send(self(), {:disconnect, reason})
   end
 
   @doc """
@@ -82,14 +116,7 @@ defmodule Sencha.User do
   end
 
   @doc """
-  Handle a pong command asynchronously
-  """
-  def handle_pong(pid, token) do
-    GenServer.cast(pid, {:handle_pong, token})
-  end
-
-  @doc """
-  Gets all user connection PIDs
+  Gets all **local** user connection PIDs
   """
   def gather() do
     ThousandIsland.connection_pids(Sencha.Supervisor.User)
@@ -105,15 +132,13 @@ defmodule Sencha.User do
 
     case kline do
       nil ->
-        message_send(
-          self(),
-          %Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :hostname),
-            command: "NOTICE",
-            middle: ["*"],
-            trailing: "Checking your hostname..."
-          }
-        )
+        socket
+        |> message_send(%Sencha.Message{
+          prefix: Application.fetch_env!(:sencha, :hostname),
+          command: "NOTICE",
+          middle: ["*"],
+          trailing: "Checking your hostname..."
+        })
 
         Task.async(fn ->
           __MODULE__.ReverseDNS.lookup(peer_ip)
@@ -130,11 +155,17 @@ defmodule Sencha.User do
            queue_flood_count: 0,
            nick?: false,
            user?: false,
-           capabilities: :wait_for_caps
+           capabilities: :wait_for_caps,
+           channel_hashes: []
          }, {:persistent, :infinity}}
 
       {id, reason} ->
-        socket |> nongraceful_disconnect("Banned (##{id}) (#{reason})", nil)
+        socket
+        |> disconnect(
+          %{host: peer_ip |> :inet.ntoa() |> to_string},
+          "Banned (##{id}) (#{reason})",
+          []
+        )
 
         {:close,
          %__MODULE__{
@@ -168,15 +199,15 @@ defmodule Sencha.User do
   end
 
   @impl ThousandIsland.Handler
-  def handle_shutdown(socket, %__MODULE__{target: target}) do
-    socket |> nongraceful_disconnect("Server is shutting down", target[:nickname])
+  def handle_shutdown(socket, %__MODULE__{target: target, channel_hashes: hashes}) do
+    socket |> disconnect(target, "Server was shut down", hashes)
 
     :ok
   end
 
   @impl ThousandIsland.Handler
-  def handle_error(_reason, socket, %__MODULE__{target: target}) do
-    socket |> nongraceful_disconnect("Server error", target[:nickname])
+  def handle_error(_reason, socket, %__MODULE__{target: target, channel_hashes: hashes}) do
+    socket |> disconnect(target, "Server error", hashes)
 
     :ok
   end
@@ -185,31 +216,33 @@ defmodule Sencha.User do
   # GenServer callbacks
   # ===========================================================================
   @impl GenServer
-  def handle_info(:timeout_auth, {socket, state}) do
-    disconnect(self(), "Authentication timeout")
+  def handle_info(:timeout_auth, {socket, state = %__MODULE__{target: target}}) do
+    socket |> disconnect(target, "Authentication timeout", [])
 
     {:noreply, {socket, state}}
   end
 
   @impl GenServer
   def handle_info(:ping_soft, {socket, state = %__MODULE__{last_token: last_token}}) do
-    message_send(
-      self(),
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "PING",
-        middle: ["Sencha-#{last_token}"]
-      }
-    )
+    socket
+    |> message_send(%Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "PING",
+      middle: ["Sencha-#{last_token}"]
+    })
 
     {:noreply, {socket, state}}
   end
 
   @impl GenServer
-  def handle_info(:ping_hard, {socket, state = %__MODULE__{last_token: last_token}}) do
+  def handle_info(
+        :ping_hard,
+        {socket,
+         state = %__MODULE__{target: target, last_token: last_token, channel_hashes: hashes}}
+      ) do
     this_token = DateTime.utc_now() |> DateTime.to_unix()
     this_token = this_token - last_token
-    disconnect(self(), "Ping timeout (#{this_token} seconds)")
+    socket |> disconnect(target, "Ping timeout (#{this_token} seconds)", hashes)
 
     {:noreply, {socket, state}}
   end
@@ -224,7 +257,13 @@ defmodule Sencha.User do
     else
       message = message_queue |> :queue.head()
       {:ok, decoded} = Sencha.Message.decode(message)
-      state = state |> message_recv(decoded)
+
+      state =
+        state
+        |> message_recv(
+          socket,
+          decoded
+        )
 
       send(self(), :flush)
 
@@ -233,9 +272,13 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_info(:flood_check, {socket, state = %__MODULE__{queue_flood_count: flood}})
+  def handle_info(
+        :flood_check,
+        {socket,
+         state = %__MODULE__{target: target, queue_flood_count: flood, channel_hashes: hashes}}
+      )
       when flood > @flood_amount do
-    disconnect(self(), "Excess flood")
+    socket |> disconnect(target, "Excess flood", hashes)
     {:noreply, {socket, state}}
   end
 
@@ -261,47 +304,41 @@ defmodule Sencha.User do
     host =
       case host do
         {:ok, host} ->
-          message_send(
-            self(),
-            %Sencha.Message{
-              prefix: Application.fetch_env!(:sencha, :hostname),
-              command: "NOTICE",
-              middle: ["*"],
-              trailing: "Found your hostname"
-            }
-          )
+          socket
+          |> message_send(%Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :hostname),
+            command: "NOTICE",
+            middle: ["*"],
+            trailing: "Found your hostname"
+          })
 
           host
 
         {:error, _error} ->
-          message_send(
-            self(),
-            %Sencha.Message{
-              prefix: Application.fetch_env!(:sencha, :hostname),
-              command: "NOTICE",
-              middle: ["*"],
-              trailing: "Couldn't look up your hostname"
-            }
-          )
+          socket
+          |> message_send(%Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :hostname),
+            command: "NOTICE",
+            middle: ["*"],
+            trailing: "Couldn't look up your hostname"
+          })
 
           peer_ip |> :inet.ntoa() |> to_string
       end
 
-    message_send(
-      self(),
-      %Sencha.Message{
-        prefix: Application.fetch_env!(:sencha, :hostname),
-        command: "NOTICE",
-        middle: ["*"],
-        trailing: "Your hostname or IP address is " <> host
-      }
-    )
+    socket
+    |> message_send(%Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "NOTICE",
+      middle: ["*"],
+      trailing: "Your hostname or IP address is " <> host
+    })
 
     {:ok, connections} = gather()
 
     cond do
       length(connections) > @max_connections ->
-        disconnect(self(), "Server is over capacity, please reconnect later")
+        socket |> disconnect(%{host: host}, "Server is over capacity, please reconnect later", [])
 
         {:noreply, {socket, state}}
 
@@ -320,62 +357,34 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_cast({:disconnect, reason}, {socket, state = %__MODULE__{target: target}}) do
-    socket |> nongraceful_disconnect(reason, target[:nickname])
+  def handle_info({:remote_send, message}, {socket, state}) do
+    socket |> message_send(message)
 
     {:noreply, {socket, state}}
   end
 
   @impl GenServer
-  def handle_cast(
-        {:handle_pong, token},
-        {socket,
-         state = %__MODULE__{
-           last_token: last_token,
-           timeout_ping_soft: soft,
-           timeout_ping_hard: hard
-         }}
+  def handle_info(
+        {:disconnect, reason},
+        {socket, state = %__MODULE__{target: target, channel_hashes: hashes}}
       ) do
-    if token == "Sencha-#{last_token}" do
-      Process.cancel_timer(soft)
-      Process.cancel_timer(hard)
+    socket |> disconnect(target, reason, hashes)
 
-      {:noreply,
-       {socket,
-        %__MODULE__{
-          state
-          | last_token: DateTime.utc_now() |> DateTime.to_unix(),
-            timeout_ping_soft: Process.send_after(self(), :ping_soft, @ping_soft_milliseconds),
-            timeout_ping_hard: Process.send_after(self(), :ping_hard, @ping_hard_milliseconds)
-        }}}
-    else
-      {:noreply, {socket, state}}
-    end
+    {:noreply, {socket, state}}
   end
 
   @impl GenServer
   def handle_cast(
         {:check_kline, cidr, id, reason},
-        {socket, state}
+        {socket, state = %__MODULE__{target: target, channel_hashes: hashes}}
       ) do
     {:ok, {peer_ip, _peer_port}} = socket |> ThousandIsland.Socket.peername()
 
     if InetCidr.contains?(cidr, peer_ip) do
-      state |> Sencha.Dispatch.Numeric.send(:ERR_YOUREBANNEDCREEP)
-      disconnect(self(), "Banned (##{id}) (#{reason})")
+      socket
+      |> message_send(__MODULE__.Numeric.encode(:ERR_YOUREBANNEDCREEP, target, %{}))
+      |> disconnect(target, "Banned (##{id}) (#{reason})", hashes)
     end
-
-    {:noreply, {socket, state}}
-  end
-
-  @impl GenServer
-  def handle_cast({:message_send, message}, {socket, state}) do
-    # TODO: How should we handle lengthy (>510 bytes) messages here?
-    {:ok, data} =
-      message
-      |> Sencha.Message.encode()
-
-    socket |> ThousandIsland.Socket.send(data <> "\r\n")
 
     {:noreply, {socket, state}}
   end
@@ -383,20 +392,54 @@ defmodule Sencha.User do
   # ===========================================================================
   # Private functions
   # ===========================================================================
-  # A "dirty" disconnect that is useful in race condition prone spots
-  defp nongraceful_disconnect(socket, reason, nickname) do
-    # Unregister this now-unused nick no matter what
-    if not is_nil(nickname) do
-      :global.unregister_name({Sencha.User, String.downcase(nickname)})
-    end
+  defp disconnect(
+         socket,
+         target,
+         reason,
+         channel_hashes
+       ) do
+    if not is_nil(target[:nickname]) do
+      nick_hash = String.downcase(target.nickname)
 
-    host = Application.fetch_env!(:sencha, :hostname)
+      message =
+        %Sencha.Message{
+          prefix: target |> Sencha.Prefix.encode(),
+          command: "QUIT",
+          trailing: reason
+        }
+
+      neighbors =
+        channel_hashes
+        |> Enum.flat_map(&Sencha.Channel.gather_hashes/1)
+        |> MapSet.new()
+        |> MapSet.delete(nick_hash)
+        |> MapSet.to_list()
+
+      for neighbor <- neighbors do
+        Sencha.User.remote_send(message, neighbor)
+      end
+
+      for channel_hash <- channel_hashes do
+        :mnesia.transaction(fn ->
+          case :mnesia.read(__MODULE__.Roster, channel_hash) do
+            [{__MODULE__.Roster, ^channel_hash, others, attributes, modes}] ->
+              :mnesia.write(
+                {__MODULE__.Roster, channel_hash, others |> List.delete(target), attributes,
+                 modes}
+              )
+          end
+        end)
+        Sencha.Channel.garbage_collect(channel_hash)
+      end
+
+      :global.unregister_name({Sencha.User, nick_hash})
+    end
 
     {:ok, data} =
       %Sencha.Message{
-        prefix: host,
+        prefix: target.host,
         command: "ERROR",
-        trailing: "Closing Link: [#{host}] (#{reason})"
+        trailing: "Closing Link: [#{target.host}] (#{reason})"
       }
       |> Sencha.Message.encode()
 
@@ -406,10 +449,14 @@ defmodule Sencha.User do
 
   defp message_recv(
          state = %__MODULE__{timeout_auth: timeout_auth},
+         socket,
          message
        ) do
     Logger.debug(message)
-    state = %__MODULE__{nick?: nick?, user?: user?, capabilities: caps_state} = state |> Sencha.Dispatch.handle(message)
+
+    state =
+      %__MODULE__{nick?: nick?, user?: user?, capabilities: caps_state} =
+      state |> __MODULE__.Command.handle(socket, message)
 
     caps? =
       case caps_state do
@@ -431,7 +478,7 @@ defmodule Sencha.User do
         Process.cancel_timer(timeout_auth)
 
         # send the welcome burst
-        state |> Sencha.Dispatch.Welcome.send_burst()
+        state |> __MODULE__.Welcome.send_burst(socket)
 
         # send soft and hard pings
         # soft one will ping and hard one will disconnect

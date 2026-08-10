@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command MOTD
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,28 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Motd do
+defmodule Sencha.User.Numeric.RPL_YOURHOST do
   @moduledoc false
-  def handle(
-        state,
-        _message
-      ) do
-    # TODO
-    motd = :persistent_term.get(Sencha.MOTD, :nomotd)
-
-    case motd do
-      :nomotd ->
-        state
-        |> Sencha.Dispatch.Numeric.send(:ERR_NOMOTD)
-
-      motd ->
-        state |> Sencha.Dispatch.Numeric.send(:RPL_MOTDSTART)
-
-        for line <- motd do
-          state |> Sencha.Dispatch.Numeric.send(:RPL_MOTD, %{line: line})
-        end
-
-        state |> Sencha.Dispatch.Numeric.send(:RPL_ENDOFMOTD)
-    end
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, _args) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "002",
+      middle: [target[:nickname] || "*"],
+      trailing:
+        "Your host is #{Application.fetch_env!(:sencha, :hostname)} running Sencha IRC v#{:persistent_term.get(Sencha.Version)}"
+    }
   end
 end

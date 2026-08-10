@@ -1,4 +1,4 @@
-# Configuration for unit test environments
+# Skeletons for numeric responses
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.User.Numeric do
+  @moduledoc """
+  Skeletons for numeric responses
+  """
+  @callback handle_encode(target :: map, args :: map) :: %Sencha.Message{}
+  @doc """
+  Make an IRCv3 numeric name into a `Sencha.Message`
 
-# Change this...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_test",
-  pool_size: 10
-
-config :sencha, hostname: "192.168.88.100"
+  - `type`: the numeric as an atom
+  - `target`: a `Sencha.Prefix`
+  - `args`: anything else that is needed
+  """
+  def encode(type, target, args \\ %{}) do
+    apply(Module.concat([__MODULE__, type]), :handle_encode, [target, args])
+  end
+end

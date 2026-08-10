@@ -1,4 +1,4 @@
-# Configuration for unit test environments
+# Dispatch IRCv3 command LUSERS
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.User.Command.Lusers do
+  @moduledoc false
+  def handle(
+        state,
+        socket,
+        _message
+      ) do
+    for m <- [
+          Sencha.User.Numeric.encode(:RPL_LUSERCLIENT, state.target),
+          Sencha.User.Numeric.encode(:RPL_LUSERME, state.target)
+        ] do
+      Sencha.User.message_send(socket, m)
+    end
 
-# Change this...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_test",
-  pool_size: 10
-
-config :sencha, hostname: "192.168.88.100"
+    state
+  end
+end

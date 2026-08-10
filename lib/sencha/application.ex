@@ -16,6 +16,7 @@ defmodule Sencha.Application do
   # See https://hexdocs.pm/elixir/Application.html
   # for more information on OTP Applications
   @moduledoc false
+  require Logger
 
   use Application
 
@@ -24,6 +25,30 @@ defmodule Sencha.Application do
     Sencha.init_creation_date()
     Sencha.refresh_version()
     Sencha.rehash()
+
+    # Start mnesia because IRC channels depend on it for distributed state
+
+    # We don't create the schema, we just need to include on-disk nodes
+    # which we don't need
+    :mnesia.start()
+
+    channel =
+      :mnesia.create_table(Sencha.Channel.Roster,
+        attributes: [:channel, :targets, :attributes, :modes],
+        ram_copies: [node() | Node.list()],
+        type: :set
+      )
+
+    :ok =
+      case channel do
+        {:atomic, :ok} ->
+          Logger.info("Started new IRC channel roster")
+          :ok
+
+        {:aborted, {:already_exists, _tid}} ->
+          Logger.info("Importing IRC channel roster from other node(s)")
+          :mnesia.wait_for_tables([Sencha.Channel.Roster], 5000)
+      end
 
     children = [
       Sencha.Repo,

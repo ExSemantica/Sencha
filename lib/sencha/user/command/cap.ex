@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Cap do
+defmodule Sencha.User.Command.Cap do
   @moduledoc false
   def capabilities, do: %{"sencha/test" => nil}
 
@@ -21,6 +21,7 @@ defmodule Sencha.Dispatch.Cap do
   # ===========================================================================
   def handle(
         state = %Sencha.User{target: target, capabilities: caps},
+        socket,
         _message = %Sencha.Message{middle: ["LS" | version]}
       ) do
     got =
@@ -37,7 +38,7 @@ defmodule Sencha.Dispatch.Cap do
     case version do
       ["302"] ->
         Sencha.User.message_send(
-          self(),
+          socket,
           %Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :hostname),
             command: "CAP",
@@ -49,7 +50,7 @@ defmodule Sencha.Dispatch.Cap do
       [] ->
         # Fallback
         Sencha.User.message_send(
-          self(),
+          socket,
           %Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :hostname),
             command: "CAP",
@@ -74,11 +75,12 @@ defmodule Sencha.Dispatch.Cap do
   # ===========================================================================
   def handle(
         state = %Sencha.User{target: target, capabilities: {:ok, enabled}},
-        _message = %Sencha.Message{middle: ["LIST"]}
+        socket,
+        %Sencha.Message{middle: ["LIST"]}
       ) do
     # It doesn't need to be chunked since it's in the trailing parameter list
     Sencha.User.message_send(
-      self(),
+      socket,
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "CAP",
@@ -95,6 +97,7 @@ defmodule Sencha.Dispatch.Cap do
   # ===========================================================================
   def handle(
         state = %Sencha.User{target: target, capabilities: caps},
+        socket,
         message = %Sencha.Message{middle: ["REQ" | wanted]}
       ) do
     IO.inspect(state)
@@ -133,7 +136,7 @@ defmodule Sencha.Dispatch.Cap do
     if chunks_rev_others != [] do
       for chunk <- chunks_rev_others do
         Sencha.User.message_send(
-          self(),
+          socket,
           %Sencha.Message{
             prefix: Application.fetch_env!(:sencha, :hostname),
             command: "CAP",
@@ -151,7 +154,7 @@ defmodule Sencha.Dispatch.Cap do
     end
 
     Sencha.User.message_send(
-      self(),
+      socket,
       %Sencha.Message{
         prefix: Application.fetch_env!(:sencha, :hostname),
         command: "CAP",
@@ -178,7 +181,7 @@ defmodule Sencha.Dispatch.Cap do
       if chunks_rev_others != [] do
         for chunk <- chunks_rev_others do
           Sencha.User.message_send(
-            self(),
+            socket,
             %Sencha.Message{
               prefix: Application.fetch_env!(:sencha, :hostname),
               command: "CAP",
@@ -196,7 +199,7 @@ defmodule Sencha.Dispatch.Cap do
       end
 
       Sencha.User.message_send(
-        self(),
+        socket,
         %Sencha.Message{
           prefix: Application.fetch_env!(:sencha, :hostname),
           command: "CAP",
@@ -219,6 +222,7 @@ defmodule Sencha.Dispatch.Cap do
   # ===========================================================================
   def handle(
         state = %Sencha.User{capabilities: {:stall_for_caps, caps}},
+        _socket,
         _message = %Sencha.Message{middle: ["END"]}
       ) do
     %Sencha.User{state | capabilities: {:ok, caps}}
@@ -226,6 +230,7 @@ defmodule Sencha.Dispatch.Cap do
 
   def handle(
         state,
+        _socket,
         _message
       ) do
     state

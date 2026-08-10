@@ -1,4 +1,4 @@
-# Configuration for unit test environments
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
+defmodule Sencha.User.Numeric.RPL_LUSERME do
+  @moduledoc false
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, _args) do
+    {:ok, connections} = Sencha.User.gather()
+    connections_num = length(connections)
+    nodes_num = length([node() | Node.list()])
 
-# Change this...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_test",
-  pool_size: 10
-
-config :sencha, hostname: "192.168.88.100"
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "255",
+      middle: [
+        target[:nickname] || "*"
+      ],
+      trailing: "I have #{connections_num} clients and #{nodes_num} servers"
+    }
+  end
+end

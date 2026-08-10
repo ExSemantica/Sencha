@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command PING
+# Dispatch IRCv3 command LUSERS
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,23 +12,15 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Ping do
+defmodule Sencha.User.Command.Join do
   @moduledoc false
-  def handle(state, %Sencha.Message{middle: [token]}) do
-    Sencha.User.message_send(self(), %Sencha.Message{
-      prefix: Application.fetch_env!(:sencha, :hostname),
-      command: "PONG",
-      middle: [token]
-    })
-
-    state
-  end
-
-  def handle(state, %Sencha.Message{middle: []}) do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "PING"})
-  end
-
-  def handle(state,  _message) do
-    state
+  def handle(
+        state = %Sencha.User{target: target},
+        socket,
+        %Sencha.Message{
+          middle: [channel]
+        }
+      ) do
+    state |> Sencha.Channel.join(socket, channel, target)
   end
 end

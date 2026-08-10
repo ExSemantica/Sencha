@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command LUSERS
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,14 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Lusers do
+defmodule Sencha.User.Numeric.RPL_TOPICWHOTIME do
   @moduledoc false
-  def handle(
-        state,
-        _message
-      ) do
-    state
-    |> Sencha.Dispatch.Numeric.send(:RPL_LUSERCLIENT)
-    |> Sencha.Dispatch.Numeric.send(:RPL_LUSERME)
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, %{channel: channel, who: nick, set_at: time}) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "333",
+      middle: [
+        target[:nickname] || "*",
+        channel,
+        nick,
+        time
+      ]
+    }
   end
 end

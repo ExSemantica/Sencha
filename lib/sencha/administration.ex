@@ -47,10 +47,10 @@ defmodule Sencha.Administration do
 
   def channel_register(name, modes) do
     case %Sencha.Repo.Channel{
-      name: name,
-      sticky_modes: modes
-    } |> Sencha.Constrain.Channel.safe_insert() do
-
+           name: name,
+           sticky_modes: modes
+         }
+         |> Sencha.Constrain.Channel.safe_insert() do
       {:ok, _user} ->
         Logger.notice("Channel '#{name}' has been registered")
 
@@ -63,7 +63,6 @@ defmodule Sencha.Administration do
         :error
     end
   end
-
 
   def channel_remove(channel) do
     Sencha.Repo.one!(from(c in Sencha.Repo.Channel, where: ilike(c.name, ^channel), select: c))

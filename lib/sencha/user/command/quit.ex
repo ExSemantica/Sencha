@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command PONG
+# Dispatch IRCv3 command QUIT
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,19 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Pong do
+defmodule Sencha.User.Command.Quit do
   @moduledoc false
-  def handle(state, %Sencha.Message{middle: [token]}) do
-    Sencha.User.handle_pong(self(), token)
 
-    state
-  end
+  def handle(state, _socket, %Sencha.Message{trailing: reason}) do
+    Sencha.User.local_disconnect(
+      if is_nil(reason) do
+        "Client Quit"
+      else
+        "Quit: #{reason}"
+      end
+    )
 
-  def handle(state, %Sencha.Message{middle: []}) do
-    state |> Sencha.Dispatch.Numeric.send(:ERR_NEEDMOREPARAMS, %{command: "PONG"})
-  end
-
-  def handle(state, _message) do
     state
   end
 end

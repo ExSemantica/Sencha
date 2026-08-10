@@ -1,4 +1,4 @@
-# Send welcome burst to user
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,16 +12,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.Dispatch.Welcome do
+defmodule Sencha.User.Numeric.RPL_MYINFO do
   @moduledoc false
-  def send_burst(state) do
-    state
-    |> Sencha.Dispatch.Numeric.send(:RPL_WELCOME)
-    |> Sencha.Dispatch.Numeric.send(:RPL_YOURHOST)
-    |> Sencha.Dispatch.Numeric.send(:RPL_CREATED)
-    |> Sencha.Dispatch.Numeric.send(:RPL_MYINFO)
-    |> Sencha.Dispatch.Numeric.send(:RPL_ISUPPORT)
-    |> Sencha.Dispatch.handle(%Sencha.Message{command: "LUSERS"})
-    |> Sencha.Dispatch.handle(%Sencha.Message{command: "MOTD"})
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, _args) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "003",
+      middle: [target[:nickname] || "*"],
+      trailing:
+        "This server was started on #{:persistent_term.get(Sencha.CreationDate) |> Calendar.strftime("%c")}"
+    }
   end
 end

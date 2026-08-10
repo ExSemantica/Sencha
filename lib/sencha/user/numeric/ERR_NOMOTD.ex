@@ -1,4 +1,4 @@
-# Configuration for unit test environments
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,11 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
-
-# Change this...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_test",
-  pool_size: 10
-
-config :sencha, hostname: "192.168.88.100"
+defmodule Sencha.User.Numeric.ERR_NOMOTD do
+  @behaviour Sencha.User.Numeric
+  @moduledoc false
+  @impl Sencha.User.Numeric
+  def handle_encode(target, _args) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "422",
+      middle: [target[:nickname] || "*"],
+      trailing: "MOTD file is missing"
+    }
+  end
+end
