@@ -32,7 +32,8 @@ defmodule Sencha.User do
     :last_token,
     :gecos,
     :capabilities,
-    :channel_hashes
+    :channel_hashes,
+    :away_status
   ]
 
   @max_connections 250
@@ -101,8 +102,62 @@ defmodule Sencha.User do
   @doc """
   Disconnect yourself from the IRC server
   """
-  def local_disconnect(reason) do
-    send(self(), {:disconnect, reason})
+  def disconnect(
+         socket,
+         target,
+         reason,
+         channel_hashes
+       ) do
+    if not is_nil(target[:nickname]) do
+      nick_hash = String.downcase(target.nickname)
+
+      message =
+        %Sencha.Message{
+          prefix: target |> Sencha.Prefix.encode(),
+          command: "QUIT",
+          trailing: reason
+        }
+
+      neighbors =
+        channel_hashes
+        |> Enum.flat_map(&Sencha.Channel.gather_hashes/1)
+        |> MapSet.new()
+        |> MapSet.delete(nick_hash)
+        |> MapSet.to_list()
+
+      for neighbor <- neighbors do
+        Sencha.User.remote_send(message, neighbor)
+      end
+
+      for channel_hash <- channel_hashes do
+        :mnesia.transaction(fn ->
+          case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
+            [{Sencha.Channel.Roster, ^channel_hash, others, attributes, modes}] ->
+              :mnesia.write(
+                {Sencha.Channel.Roster, channel_hash, others |> List.delete(target), attributes,
+                 modes}
+              )
+          end
+        end)
+
+        Sencha.Channel.garbage_collect(channel_hash)
+      end
+
+      :global.unregister_name({Sencha.User, nick_hash})
+    end
+
+    {:ok, data} =
+      %Sencha.Message{
+        prefix: target.host,
+        command: "ERROR",
+        trailing: "Closing Link: [#{target.host}] (#{reason})"
+      }
+      |> Sencha.Message.encode()
+
+    socket |> ThousandIsland.Socket.send(data <> "\r\n")
+    socket |> ThousandIsland.Socket.shutdown(:read_write)
+
+    :ok
   end
 
   @doc """
@@ -120,6 +175,13 @@ defmodule Sencha.User do
   """
   def gather() do
     ThousandIsland.connection_pids(Sencha.Supervisor.User)
+  end
+
+  @doc """
+  Send an away status to this user, **will use globals table**
+  """
+  def send_away_status(user_hash, respond_to_hash) do
+    :global.send({__MODULE__, user_hash}, {:send_away_status, respond_to_hash})
   end
 
   # ===========================================================================
@@ -215,6 +277,24 @@ defmodule Sencha.User do
   # ===========================================================================
   # GenServer callbacks
   # ===========================================================================
+  @impl GenServer
+  def handle_info(
+        {:send_away_status, respond_to_hash},
+        {socket, state = %__MODULE__{target: target, away_status: away_status}}
+      ) do
+    if not is_nil(away_status) do
+      remote_send(
+        Sencha.User.Numeric.encode(:ERR_CANNOTSENDTOCHAN, target, %{
+          nick: target.nickname,
+          status: away_status
+        }),
+        respond_to_hash
+      )
+    end
+
+    {:noreply, {socket, state}}
+  end
+
   @impl GenServer
   def handle_info(:timeout_auth, {socket, state = %__MODULE__{target: target}}) do
     socket |> disconnect(target, "Authentication timeout", [])
@@ -392,61 +472,6 @@ defmodule Sencha.User do
   # ===========================================================================
   # Private functions
   # ===========================================================================
-  defp disconnect(
-         socket,
-         target,
-         reason,
-         channel_hashes
-       ) do
-    if not is_nil(target[:nickname]) do
-      nick_hash = String.downcase(target.nickname)
-
-      message =
-        %Sencha.Message{
-          prefix: target |> Sencha.Prefix.encode(),
-          command: "QUIT",
-          trailing: reason
-        }
-
-      neighbors =
-        channel_hashes
-        |> Enum.flat_map(&Sencha.Channel.gather_hashes/1)
-        |> MapSet.new()
-        |> MapSet.delete(nick_hash)
-        |> MapSet.to_list()
-
-      for neighbor <- neighbors do
-        Sencha.User.remote_send(message, neighbor)
-      end
-
-      for channel_hash <- channel_hashes do
-        :mnesia.transaction(fn ->
-          case :mnesia.read(__MODULE__.Roster, channel_hash) do
-            [{__MODULE__.Roster, ^channel_hash, others, attributes, modes}] ->
-              :mnesia.write(
-                {__MODULE__.Roster, channel_hash, others |> List.delete(target), attributes,
-                 modes}
-              )
-          end
-        end)
-        Sencha.Channel.garbage_collect(channel_hash)
-      end
-
-      :global.unregister_name({Sencha.User, nick_hash})
-    end
-
-    {:ok, data} =
-      %Sencha.Message{
-        prefix: target.host,
-        command: "ERROR",
-        trailing: "Closing Link: [#{target.host}] (#{reason})"
-      }
-      |> Sencha.Message.encode()
-
-    socket |> ThousandIsland.Socket.send(data <> "\r\n")
-    socket |> ThousandIsland.Socket.shutdown(:read_write)
-  end
-
   defp message_recv(
          state = %__MODULE__{timeout_auth: timeout_auth},
          socket,

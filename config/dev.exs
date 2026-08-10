@@ -19,6 +19,6 @@ config :sencha, Sencha.Repo,
   url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
   pool_size: 10
 
-config :sencha, hostname: "192.168.88.100"
+config :sencha, hostname: "192.168.88.23"
 
 config :logger, :default_formatter, format: "$metadata[$level] $message\n", metadata: [:mfa]

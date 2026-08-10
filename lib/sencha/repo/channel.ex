@@ -31,9 +31,6 @@ defmodule Sencha.Repo.Channel do
     # SEE: https://modern.ircdocs.horse/#rpltopicwhotime-333
     field(:topic_changed, :utc_datetime)
 
-    # `Sencha.Prefix` of the founding user, or null
-    field(:founder_mask, :string)
-
     # Channel modes that stay after the operator(s) leave
     field(:sticky_modes, {:array, :string})
 

@@ -27,9 +27,7 @@ defmodule Sencha.Application do
     Sencha.rehash()
 
     # Start mnesia because IRC channels depend on it for distributed state
-
-    # We don't create the schema, we just need to include on-disk nodes
-    # which we don't need
+    :mnesia.create_schema([])
     :mnesia.start()
 
     channel =
@@ -53,7 +51,7 @@ defmodule Sencha.Application do
     children = [
       Sencha.Repo,
       Sencha.KLine,
-      {ThousandIsland,
+      {ThousandIsland, transport_options: [ip: :any],
        supervisor_options: [name: Sencha.Supervisor.User], port: 6667, handler_module: Sencha.User}
     ]
 

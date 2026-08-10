@@ -21,6 +21,9 @@
     "appPort": [
         6667
     ],
+    "runArgs": [
+        "--network=host"
+    ],
     "postCreateCommand": "",
     "remoteUser": "vscode",
     "customizations": {

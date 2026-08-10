@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command USER
+# Dispatch IRCv3 command NAMES
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,14 +33,18 @@ defmodule Sencha.User.Command.Names do
             })
           )
 
-        [{Sencha.Channel.Roster, _channel, targets, _attributes, modes}] ->
+        [{Sencha.Channel.Roster, real_channel, targets, _attributes, modes}] ->
           # People are on this channel
           users_prefixes =
             targets
             |> Enum.map(fn t ->
               matchee = Sencha.Prefix.encode(t)
-              oper? = modes[?o] |> Enum.any?(& Sencha.Mask.match?(matchee, &1))
-              voice? = modes[?v] |> Enum.any?(& Sencha.Mask.match?(matchee, &1))
+
+              oper? =
+                modes[?o] |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
+
+              voice? =
+                modes[?v] |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
 
               cond do
                 oper? ->
@@ -57,7 +61,7 @@ defmodule Sencha.User.Command.Names do
           Sencha.User.message_send(
             socket,
             Sencha.User.Numeric.encode(:RPL_NAMREPLY, target, %{
-              channel: channel,
+              channel: real_channel,
               user_data: users_prefixes
             })
           )
@@ -65,7 +69,7 @@ defmodule Sencha.User.Command.Names do
           Sencha.User.message_send(
             socket,
             Sencha.User.Numeric.encode(:RPL_ENDOFNAMES, target, %{
-              channel: channel
+              channel: real_channel
             })
           )
       end

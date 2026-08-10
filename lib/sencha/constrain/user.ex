@@ -29,11 +29,13 @@ defmodule Sencha.Constrain.User do
   @max_length_ident 15
   @max_length_gecos 127
   @max_length_host 127
+  @max_length_away 127
 
   def max_length_name(), do: @max_length_name
   def max_length_ident(), do: @max_length_ident
   def max_length_gecos(), do: @max_length_gecos
   def max_length_host(), do: @max_length_host
+  def max_length_away(), do: @max_length_away
 
   @doc """
   Check a nickname

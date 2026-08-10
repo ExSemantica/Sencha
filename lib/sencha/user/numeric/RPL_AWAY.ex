@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command LUSERS
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,19 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.User.Command.Join do
+defmodule Sencha.User.Numeric.RPL_AWAY do
   @moduledoc false
-  def handle(
-        state = %Sencha.User{target: target},
-        socket,
-        %Sencha.Message{
-          middle: [channel]
-        }
-      ) do
-    state |> Sencha.Channel.join(socket, channel, target)
-  end
-
-  def handle(state, _socket, _message) do
-    state
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, %{nick: nick, status: status}) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "301",
+      middle: [
+        target[:nickname] || "*",
+        nick
+      ],
+      trailing: status
+    }
   end
 end

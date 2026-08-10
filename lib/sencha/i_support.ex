@@ -20,13 +20,15 @@ defmodule Sencha.ISupport do
   """
   def get() do
     [
-      # TODO: AWAYLEN
+      "AWAYLEN=#{Sencha.Constrain.User.max_length_away()}",
       "CASEMAPPING=ascii",
       # TODO: CHANLIMIT
       "CHANMODES=#{?a..?d |> Enum.map(&(Sencha.Channel.modes(&1) |> MapSet.to_list())) |> Enum.intersperse(",") |> to_string}",
       "CHANNELLEN=#{Sencha.Constrain.Channel.max_length_name()}",
-      "CHANTYPES=#{Sencha.Constrain.Channel.supported_prefixes() |> Enum.join()}",
-      # TODO: ELIST, EXCEPTS, EXTBAN
+      "CHANTYPES=#{Sencha.Constrain.Channel.supported_prefixes() |> to_string()}",
+      # TODO: ELIST
+      "EXCEPTS=e",
+      # TODO: EXTBAN
       "HOSTLEN=#{Sencha.Constrain.User.max_length_host()}",
       # TODO: INVEX
       "KICKLEN=#{Sencha.Constrain.Channel.max_length_kick()}",

@@ -15,13 +15,20 @@
 defmodule Sencha.User.Command.Quit do
   @moduledoc false
 
-  def handle(state, _socket, %Sencha.Message{trailing: reason}) do
-    Sencha.User.local_disconnect(
+  def handle(
+        state = %Sencha.User{target: target, channel_hashes: hashes},
+        socket,
+        %Sencha.Message{trailing: reason}
+      ) do
+    Sencha.User.disconnect(
+      socket,
+      target,
       if is_nil(reason) do
         "Client Quit"
       else
         "Quit: #{reason}"
-      end
+      end,
+      hashes
     )
 
     state

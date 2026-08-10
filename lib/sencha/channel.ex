@@ -16,6 +16,7 @@ defmodule Sencha.Channel do
   @moduledoc """
   Channel state
   """
+  require Logger
   import Ecto.Query
 
   defstruct [
@@ -23,7 +24,6 @@ defmodule Sencha.Channel do
     :topic,
     :topic_changed,
     :topic_changed_by,
-    :founder_mask,
     :sticky_modes,
     :created
   ]
@@ -31,10 +31,10 @@ defmodule Sencha.Channel do
   @doc """
   SEE: https://modern.ircdocs.horse/#mode-message
   """
-  def modes(?a), do: MapSet.new(~c(bq))
+  def modes(?a), do: MapSet.new(~c(be))
   def modes(?b), do: MapSet.new(~c())
-  def modes(?c), do: MapSet.new(~c(ov))
-  def modes(?d), do: MapSet.new(~c())
+  def modes(?c), do: MapSet.new(~c(OVov))
+  def modes(?d), do: MapSet.new(~c(n))
 
   @doc """
   Gather all user hashes to prepare an operation on all users in the channel
@@ -42,23 +42,26 @@ defmodule Sencha.Channel do
   def gather_hashes(channel) do
     channel_hash = String.downcase(channel)
 
-    :mnesia.transaction(fn ->
-      case :mnesia.read(__MODULE__.Roster, channel_hash) do
-        [] ->
-          []
+    {:atomic, return} =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(__MODULE__.Roster, channel_hash) do
+          [] ->
+            []
 
-        [{__MODULE__.Roster, ^channel_hash, targets, _attributes, _modes}] ->
-          for target <- targets do
-            String.downcase(target.nickname)
-          end
-      end
-    end)
+          [{__MODULE__.Roster, ^channel_hash, targets, _attributes, _modes}] ->
+            for target <- targets do
+              String.downcase(target.nickname)
+            end
+        end
+      end)
+
+    return
   end
 
   @doc """
   Do this when a `Sencha.User` JOINs a channel.
   """
-  def join(state, socket, channel, target) do
+  def join(state = %Sencha.User{channel_hashes: channel_hashes}, socket, channel, target) do
     attributes = attributes_get(channel)
     channel_hash = String.downcase(channel)
 
@@ -67,106 +70,176 @@ defmodule Sencha.Channel do
         case :mnesia.read(__MODULE__.Roster, channel_hash) do
           [] ->
             :mnesia.write(
-              {__MODULE__.Roster, channel_hash, [target], attributes, %{?o => [target], ?v => []}}
+              {__MODULE__.Roster, channel_hash, [target], attributes,
+               %{?o => [target], ?v => [], ?b => [], ?e => [], ?n => nil}}
             )
 
-            {:ok, channel}
+            :ok
 
-          [{__MODULE__.Roster, ^channel_hash, others, attributes, modes}] ->
+          [
+            {__MODULE__.Roster, ^channel_hash, others, attributes, modes}
+          ] ->
             if target not in others do
-              targets = [target | others]
-
-              for other <- targets do
-                other_hash = String.downcase(other.nickname)
-
-                Sencha.User.remote_send(
-                  %Sencha.Message{
-                    prefix: target,
-                    command: "JOIN",
-                    middle: [attributes.name]
-                  },
-                  other_hash
-                )
-              end
-
               :mnesia.write(
                 {__MODULE__.Roster, channel_hash, [target | others], attributes, modes}
               )
 
-              {:ok, attributes.name}
+              :ok
             else
               :ignore
             end
         end
       end)
 
-    {:atomic, state} =
-      case join_stat do
-        {:atomic, {:ok, name}} ->
-          Sencha.User.Command.handle(state, socket, %Sencha.Message{
-            command: "TOPIC",
-            middle: [name]
-          })
+    case join_stat do
+      {:atomic, :ok} ->
+        :mnesia.transaction(fn ->
+          case :mnesia.read(__MODULE__.Roster, channel_hash) do
+            [
+              {__MODULE__.Roster, ^channel_hash, targets, %__MODULE__{name: name, topic: topic},
+               modes}
+            ] ->
+              origin = target |> Sencha.Prefix.encode()
 
-          Sencha.User.Command.handle(state, socket, %Sencha.Message{
-            command: "NAMES",
-            middle: [name]
-          })
+              for other <- targets do
+                if target != other do
+                  other_hash = String.downcase(other.nickname)
 
-          :mnesia.transaction(fn ->
-            case :mnesia.read(__MODULE__.Roster, channel_hash) do
-              [{__MODULE__.Roster, ^channel_hash, targets, _attributes, modes}] ->
-                matchee = Sencha.Prefix.encode(target)
-                oper? = modes[?o] |> Enum.any?(&Sencha.Mask.match?(matchee, &1))
-                voice? = modes[?v] |> Enum.any?(&Sencha.Mask.match?(matchee, &1))
-
-                cond do
-                  oper? ->
-                    for t <- targets do
-                      Sencha.User.remote_send(
-                        %Sencha.Message{
-                          prefix: Application.fetch_env!(:sencha, :hostname),
-                          command: "MODE",
-                          middle: [channel, "+o", matchee.nickname]
-                        },
-                        String.downcase(t.nickname)
-                      )
-                    end
-
-                    state
-
-                  voice? ->
-                    for t <- targets do
-                      Sencha.User.remote_send(
-                        %Sencha.Message{
-                          prefix: Application.fetch_env!(:sencha, :hostname),
-                          command: "MODE",
-                          middle: [channel, "+v", matchee.nickname]
-                        },
-                        String.downcase(t.nickname)
-                      )
-                    end
-
-                    state
-
-                  true ->
-                    state
+                  Sencha.User.remote_send(
+                    %Sencha.Message{
+                      prefix: origin,
+                      command: "JOIN",
+                      middle: [name]
+                    },
+                    other_hash
+                  )
                 end
-            end
-          end)
+              end
 
-        {:atomic, :ignore} ->
-          {:atomic, state}
-      end
+              Sencha.User.message_send(socket, %Sencha.Message{
+                prefix: origin,
+                command: "JOIN",
+                middle: [name]
+              })
 
-    state
+              matchee = Sencha.Prefix.encode(target)
+
+              oper? =
+                modes[?o]
+                |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
+
+              voice? =
+                modes[?v]
+                |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
+
+              cond do
+                oper? ->
+                  for t <- targets do
+                    Sencha.User.remote_send(
+                      %Sencha.Message{
+                        prefix: Application.fetch_env!(:sencha, :hostname),
+                        command: "MODE",
+                        middle: [name, "+o", target.nickname]
+                      },
+                      String.downcase(t.nickname)
+                    )
+                  end
+
+                voice? ->
+                  for t <- targets do
+                    Sencha.User.remote_send(
+                      %Sencha.Message{
+                        prefix: Application.fetch_env!(:sencha, :hostname),
+                        command: "MODE",
+                        middle: [name, "+v", target.nickname]
+                      },
+                      String.downcase(t.nickname)
+                    )
+                  end
+
+                true ->
+                  :ok
+              end
+
+              Sencha.User.Command.handle(state, socket, %Sencha.Message{
+                command: "MODE",
+                middle: [name]
+              })
+
+              if not is_nil(topic) do
+                Sencha.User.Command.handle(state, socket, %Sencha.Message{
+                  command: "TOPIC",
+                  middle: [name]
+                })
+              end
+
+              Sencha.User.Command.handle(state, socket, %Sencha.Message{
+                command: "NAMES",
+                middle: [name]
+              })
+          end
+        end)
+
+        %Sencha.User{state | channel_hashes: [channel_hash | channel_hashes]}
+
+      {:atomic, :ignore} ->
+        state
+    end
   end
 
   @doc """
   Do this when a `Sencha.User` PARTs a channel.
   """
-  def part(state, socket, channel, target, reason) do
+  def part(state = %Sencha.User{channel_hashes: channel_hashes}, socket, channel, target, reason) do
     channel_hash = String.downcase(channel)
+
+    {:atomic, state} =
+      :mnesia.transaction(fn ->
+        case :mnesia.read(__MODULE__.Roster, channel_hash) do
+          [] ->
+            state
+
+          [
+            {__MODULE__.Roster, ^channel_hash, targets, attributes = %__MODULE__{name: real_name},
+             modes}
+          ] ->
+            origin = target |> Sencha.Prefix.encode()
+
+            if target in targets do
+              for t <- targets do
+                Sencha.User.remote_send(
+                  %Sencha.Message{
+                    prefix: origin,
+                    command: "PART",
+                    middle: [real_name],
+                    trailing: reason
+                  },
+                  String.downcase(t.nickname)
+                )
+              end
+
+              :mnesia.write(
+                {__MODULE__.Roster, channel_hash, targets |> List.delete(target), attributes,
+                 modes}
+              )
+
+              garbage_collect(channel_hash)
+
+              %Sencha.User{state | channel_hashes: channel_hashes |> List.delete(channel_hash)}
+            else
+              Sencha.User.message_send(
+                socket,
+                Sencha.User.Numeric.encode(:ERR_NOTONCHANNEL, target, %{
+                  channel: real_name
+                })
+              )
+
+              state
+            end
+        end
+      end)
+
+    state
   end
 
   def update_attributes(channel_hash, attributes) do
@@ -197,7 +270,6 @@ defmodule Sencha.Channel do
           topic: nil,
           topic_changed: nil,
           topic_changed_by: nil,
-          founder_mask: nil,
           sticky_modes: [],
           created: DateTime.utc_now()
         }
@@ -207,7 +279,6 @@ defmodule Sencha.Channel do
         topic: topic,
         topic_changed: topic_changed,
         topic_changed_by: topic_changed_by,
-        founder_mask: founder_mask,
         sticky_modes: sticky_modes,
         inserted_at: created
       } ->
@@ -216,7 +287,6 @@ defmodule Sencha.Channel do
           topic: topic,
           topic_changed: topic_changed,
           topic_changed_by: topic_changed_by,
-          founder_mask: founder_mask,
           sticky_modes: sticky_modes,
           created: created
         }
@@ -227,6 +297,8 @@ defmodule Sencha.Channel do
   Remove a vacant channel from the roster
   """
   def garbage_collect(channel_hash) do
+    Logger.debug(channel_hash)
+
     :mnesia.transaction(fn ->
       case :mnesia.read(__MODULE__.Roster, channel_hash) do
         [{__MODULE__.Roster, ^channel_hash, [], _attributes, _modes}] ->

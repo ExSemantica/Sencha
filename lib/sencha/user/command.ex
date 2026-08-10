@@ -58,6 +58,30 @@ defmodule Sencha.User.Command do
     state |> __MODULE__.Part.handle(socket, message)
   end
 
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "TOPIC"}) do
+    state |> __MODULE__.Topic.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "NAMES"}) do
+    state |> __MODULE__.Names.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "MODE"}) do
+    state |> __MODULE__.Mode.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "PRIVMSG"}) do
+    state |> __MODULE__.Privmsg.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "NOTICE"}) do
+    state |> __MODULE__.Notice.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "AWAY"}) do
+    state |> __MODULE__.Away.handle(socket, message)
+  end
+
   def handle(state = %Sencha.User{}, _socket, message = %Sencha.Message{}) do
     Logger.warning("Unknown command received, check debug log")
     Logger.debug(message)
