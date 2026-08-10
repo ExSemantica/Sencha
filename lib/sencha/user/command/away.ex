@@ -18,7 +18,7 @@ defmodule Sencha.User.Command.Away do
         state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{
-          trailing: nil
+          middle: []
         }
       ) do
     Sencha.User.message_send(
@@ -33,9 +33,11 @@ defmodule Sencha.User.Command.Away do
         state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{
-          trailing: status
+          middle: status
         }
       ) do
+    status = status |> Enum.join(" ")
+
     if byte_size(status) <= Sencha.Constrain.User.max_length_away() do
       Sencha.User.message_send(
         socket,

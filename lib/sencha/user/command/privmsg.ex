@@ -107,6 +107,10 @@ defmodule Sencha.User.Command.Privmsg do
     state
   end
 
+  def handle(state, socket, message = %Sencha.Message{middle: [user, one]}) do
+    handle(state, socket, %Sencha.Message{message | middle: [user], trailing: one})
+  end
+
   def handle(state, _socket, _message) do
     state
   end

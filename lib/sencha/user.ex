@@ -268,6 +268,13 @@ defmodule Sencha.User do
   end
 
   @impl ThousandIsland.Handler
+  def handle_close(socket, %__MODULE__{target: target, channel_hashes: hashes}) do
+    socket |> disconnect(target, "Connection reset by peer", hashes)
+
+    :ok
+  end
+
+  @impl ThousandIsland.Handler
   def handle_error(_reason, socket, %__MODULE__{target: target, channel_hashes: hashes}) do
     socket |> disconnect(target, "Server error", hashes)
 
