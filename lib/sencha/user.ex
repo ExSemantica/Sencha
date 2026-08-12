@@ -21,8 +21,7 @@ defmodule Sencha.User do
 
   defstruct [
     :has_hostname?,
-    :nick?,
-    :user?,
+    :registered_attributes,
     :message_queue,
     :queue_flood_count,
     :target,
@@ -44,6 +43,11 @@ defmodule Sencha.User do
   @flood_amount 5
   @flood_milliseconds 1_000
   @tag_whitelist ["+typing"]
+
+  @doc """
+  Returns what is needed to register the user fully
+  """
+  def registered_fully, do: MapSet.new([:nick, :user])
 
   @doc """
   Interval in milliseconds to issue a ping
@@ -110,7 +114,6 @@ defmodule Sencha.User do
         reason,
         channel_hashes
       ) do
-
     if not is_nil(target[:nickname]) do
       nick_hash = String.downcase(target.nickname)
 
@@ -232,8 +235,7 @@ defmodule Sencha.User do
            has_hostname?: false,
            message_queue: :queue.new(),
            queue_flood_count: 0,
-           nick?: false,
-           user?: false,
+           registered_attributes: MapSet.new(),
            capabilities: :wait_for_caps,
            channel_hashes: [],
            via: Application.fetch_env!(:sencha, :hostname)
@@ -587,7 +589,11 @@ defmodule Sencha.User do
   # Private functions
   # ===========================================================================
   defp message_recv(
-         state = %__MODULE__{target: target, timeout_auth: timeout_auth, capabilities: caps},
+         state = %__MODULE__{
+           target: target,
+           timeout_auth: timeout_auth,
+           capabilities: caps
+         },
          socket,
          message = %Sencha.Message{tags: tags}
        ) do
@@ -616,9 +622,11 @@ defmodule Sencha.User do
       end
 
     state =
-      %__MODULE__{nick?: nick?, user?: user?, capabilities: caps_state} =
+      %__MODULE__{registered_attributes: registered, capabilities: caps_state} =
       state
       |> __MODULE__.Command.handle(socket, message)
+
+    registered? = MapSet.subset?(registered_fully(), registered)
 
     caps? =
       case caps_state do
@@ -636,7 +644,7 @@ defmodule Sencha.User do
       end
 
     cond do
-      !!Process.read_timer(timeout_auth) and nick? and user? and caps? ->
+      !!Process.read_timer(timeout_auth) and registered? and caps? ->
         Process.cancel_timer(timeout_auth)
 
         # send the welcome burst

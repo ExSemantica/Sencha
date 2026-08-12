@@ -16,14 +16,57 @@ defmodule Sencha.User.Command.User do
   @moduledoc false
   require Logger
 
-  def handle(state = %Sencha.User{target: target, user?: true}, socket, _message) do
-    Sencha.User.message_send(
-      socket,
-      Sencha.User.Numeric.encode(:ERR_ALREADYREGISTERED, target),
-      target
-    )
+  def handle(
+        state = %Sencha.User{
+          target: target,
+          registered_attributes: registered,
+          capabilities: caps_state
+        },
+        socket,
+        %Sencha.Message{
+          middle: [ident, _nc0, _nc1],
+          trailing: realname
+        }
+      ) do
+    if MapSet.member?(registered, :user) do
+      Sencha.User.message_send(
+        socket,
+        Sencha.User.Numeric.encode(:ERR_ALREADYREGISTERED, target),
+        target
+      )
 
-    state
+      state
+    else
+      state =
+        case caps_state do
+          :wait_for_caps ->
+            Logger.debug("Will ignore CAP handshake due to premature recv of USER")
+            %Sencha.User{state | capabilities: :ignore}
+
+          _other ->
+            state
+        end
+
+      cond do
+        Sencha.Constrain.User.check_ident?(ident) and is_nil(realname) ->
+          %Sencha.User{
+            state
+            | registered_attributes: MapSet.put(registered, :user),
+              target: %{target | user: ident}
+          }
+
+        Sencha.Constrain.User.check_ident?(ident) and Sencha.Constrain.User.check_gecos?(realname) ->
+          %Sencha.User{
+            state
+            | registered_attributes: MapSet.put(registered, :user),
+              gecos: realname,
+              target: %{target | user: ident}
+          }
+
+        true ->
+          state
+      end
+    end
   end
 
   def handle(state = %Sencha.User{target: target}, socket, message)
@@ -35,36 +78,6 @@ defmodule Sencha.User.Command.User do
     )
 
     state
-  end
-
-  def handle(
-        state = %Sencha.User{target: target, capabilities: caps_state},
-        _socket,
-        %Sencha.Message{
-          middle: [ident, _nc0, _nc1],
-          trailing: realname
-        }
-      ) do
-    state =
-      case caps_state do
-        :wait_for_caps ->
-          Logger.debug("Will ignore CAP handshake due to premature recv of USER")
-          %Sencha.User{state | capabilities: :ignore}
-
-        _other ->
-          state
-      end
-
-    cond do
-      Sencha.Constrain.User.check_ident?(ident) and is_nil(realname) ->
-        %Sencha.User{state | user?: true, target: %{target | user: ident}}
-
-      Sencha.Constrain.User.check_ident?(ident) and Sencha.Constrain.User.check_gecos?(realname) ->
-        %Sencha.User{state | user?: true, gecos: realname, target: %{target | user: ident}}
-
-      true ->
-        state
-    end
   end
 
   def handle(state, socket, message = %Sencha.Message{middle: [ident, nc0, nc1 | realname]}) do

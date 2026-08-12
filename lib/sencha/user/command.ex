@@ -35,11 +35,11 @@ defmodule Sencha.User.Command do
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "LUSERS"}) do
-    state |> __MODULE__.Lusers.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Lusers.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "MOTD"}) do
-    state |> __MODULE__.Motd.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Motd.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "CAP"}) do
@@ -51,43 +51,43 @@ defmodule Sencha.User.Command do
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "JOIN"}) do
-    state |> __MODULE__.Join.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Join.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "PART"}) do
-    state |> __MODULE__.Part.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Part.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "TOPIC"}) do
-    state |> __MODULE__.Topic.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Topic.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "NAMES"}) do
-    state |> __MODULE__.Names.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Names.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "MODE"}) do
-    state |> __MODULE__.Mode.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Mode.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "PRIVMSG"}) do
-    state |> __MODULE__.Privmsg.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Privmsg.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "NOTICE"}) do
-    state |> __MODULE__.Notice.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Notice.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "AWAY"}) do
-    state |> __MODULE__.Away.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Away.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "WHO"}) do
-    state |> __MODULE__.Who.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |>  __MODULE__.Who.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "TAGMSG"}) do
-    state |> __MODULE__.Tagmsg.handle(socket, message)
+    state |> handle_registered(socket, &(&1 |>  __MODULE__.Tagmsg.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, _socket, message = %Sencha.Message{}) do
@@ -95,5 +95,26 @@ defmodule Sencha.User.Command do
     Logger.debug(message)
 
     state
+  end
+
+  defp handle_registered(
+         state = %Sencha.User{registered_attributes: registered, target: target},
+         socket,
+         fun
+       ) do
+    registered? = MapSet.subset?(Sencha.User.registered_fully(), registered)
+
+    if registered? do
+      state
+      |> fun.()
+    else
+      Sencha.User.message_send(
+        socket,
+        Sencha.User.Numeric.encode(:ERR_NOTREGISTERED, target),
+        target
+      )
+
+      state
+    end
   end
 end

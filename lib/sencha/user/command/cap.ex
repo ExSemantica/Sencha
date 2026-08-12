@@ -14,7 +14,7 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Cap do
   @moduledoc false
-  def capabilities, do: %{"sencha/test" => nil, "message-tags" => nil}
+  def capabilities, do: %{"message-tags" => nil}
 
   # ===========================================================================
   # CAP LS

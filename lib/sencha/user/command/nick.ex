@@ -17,7 +17,7 @@ defmodule Sencha.User.Command.Nick do
   require Logger
 
   def handle(
-        state = %Sencha.User{target: target, capabilities: caps_state},
+        state = %Sencha.User{target: target, capabilities: caps_state, registered_attributes: registered},
         socket,
         %Sencha.Message{middle: [nick]}
       ) do
@@ -50,7 +50,7 @@ defmodule Sencha.User.Command.Nick do
 
           %Sencha.User{
             state
-            | nick?: true,
+            | registered_attributes: MapSet.put(registered, :nick),
               capabilities: :ignore,
               target: %{target | nickname: nick}
           }
@@ -58,7 +58,7 @@ defmodule Sencha.User.Command.Nick do
         :yes when is_nil(previous_nick) ->
           %Sencha.User{
             state
-            | nick?: true,
+            | registered_attributes: MapSet.put(registered, :nick),
               target: %{target | nickname: nick}
           }
 
@@ -73,7 +73,7 @@ defmodule Sencha.User.Command.Nick do
             target
           )
 
-          %{state | nick?: true, target: %{target | nickname: nick}}
+          %{state | registered_attributes: MapSet.put(registered, :nick), target: %{target | nickname: nick}}
 
         :already_in_use ->
           Sencha.User.message_send(
