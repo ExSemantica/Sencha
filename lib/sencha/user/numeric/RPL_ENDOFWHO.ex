@@ -1,4 +1,4 @@
-# Configuration for development environments
+# Handle numeric response
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,13 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import Config
-
-# Change these...
-config :sencha, Sencha.Repo,
-  url: "postgres://postgres:postgres@192.168.88.100:5432/sencha_dev",
-  pool_size: 10
-
-config :sencha, hostname: "192.168.88.23"
-
-config :logger, :default_formatter, format: "$date $time $metadata[$level] $message\n", metadata: [:mfa]
+defmodule Sencha.User.Numeric.RPL_ENDOFWHO do
+  @moduledoc false
+  @behaviour Sencha.User.Numeric
+  @impl Sencha.User.Numeric
+  def handle_encode(target, %{
+        mask: mask
+      }) do
+    %Sencha.Message{
+      prefix: Application.fetch_env!(:sencha, :hostname),
+      command: "315",
+      middle: [
+        target[:nickname] || "*",
+        mask
+      ],
+      trailing: "End of WHO list"
+    }
+  end
+end

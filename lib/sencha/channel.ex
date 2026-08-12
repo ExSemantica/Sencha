@@ -116,11 +116,15 @@ defmodule Sencha.Channel do
                 end
               end
 
-              Sencha.User.message_send(socket, %Sencha.Message{
-                prefix: origin,
-                command: "JOIN",
-                middle: [name]
-              })
+              Sencha.User.message_send(
+                socket,
+                %Sencha.Message{
+                  prefix: origin,
+                  command: "JOIN",
+                  middle: [name]
+                },
+                target
+              )
 
               matchee = Sencha.Prefix.encode(target)
 
@@ -231,7 +235,8 @@ defmodule Sencha.Channel do
                 socket,
                 Sencha.User.Numeric.encode(:ERR_NOTONCHANNEL, target, %{
                   channel: real_name
-                })
+                }),
+                target
               )
 
               state
@@ -308,5 +313,40 @@ defmodule Sencha.Channel do
           :ok
       end
     end)
+  end
+
+  def try_broadcast(
+        {Sencha.Channel.Roster, real_channel, targets, _attributes, modes},
+        target,
+        on_success,
+        error_handlers
+      ) do
+    matchee = target |> Sencha.Prefix.encode()
+
+    banned? =
+      modes[?b]
+      |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
+
+    exception? =
+      modes[?e]
+      |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
+
+    cond do
+      banned? and not exception? ->
+        # Silently fail if this user is banned
+        :ok
+
+      Map.has_key?(modes, ?n) and target not in targets ->
+        error_handler = error_handlers[:on_not_in_channel] || fn -> nil end
+        error_handler.()
+
+      true ->
+        origin = target |> Sencha.Prefix.encode()
+        recipients = targets |> List.delete(target)
+
+        for r <- recipients do
+          on_success.(real_channel, origin, r)
+        end
+    end
   end
 end

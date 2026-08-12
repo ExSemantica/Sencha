@@ -14,20 +14,31 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Ping do
   @moduledoc false
-  def handle(state, socket, %Sencha.Message{middle: [token]}) do
-    Sencha.User.message_send(socket, %Sencha.Message{
-      prefix: Application.fetch_env!(:sencha, :hostname),
-      command: "PONG",
-      middle: [token]
-    })
+  def handle(state = %Sencha.User{target: target}, socket, %Sencha.Message{
+        middle: [],
+        trailing: token
+      }) do
+    Sencha.User.message_send(
+      socket,
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "PONG",
+        trailing: token
+      },
+      target
+    )
 
     state
   end
 
-  def handle(state, socket, %Sencha.Message{middle: []}) do
+  def handle(state = %Sencha.User{target: target}, socket, %Sencha.Message{middle: [token]}) do
     Sencha.User.message_send(
       socket,
-      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, state.target, %{command: "PING"})
+      %Sencha.Message{
+        command: "PONG",
+        middle: [token]
+      },
+      target
     )
 
     state

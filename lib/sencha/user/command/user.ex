@@ -16,20 +16,22 @@ defmodule Sencha.User.Command.User do
   @moduledoc false
   require Logger
 
-  def handle(state = %{user?: true}, socket, _message) do
+  def handle(state = %Sencha.User{target: target, user?: true}, socket, _message) do
     Sencha.User.message_send(
       socket,
-      Sencha.User.Numeric.encode(:ERR_ALREADYREGISTERED, state.target)
+      Sencha.User.Numeric.encode(:ERR_ALREADYREGISTERED, target),
+      target
     )
 
     state
   end
 
-  def handle(state, socket, message)
+  def handle(state = %Sencha.User{target: target}, socket, message)
       when length(message.middle) < 3 do
     Sencha.User.message_send(
       socket,
-      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, state.target, %{command: "USER"})
+      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, target, %{command: "USER"}),
+      target
     )
 
     state

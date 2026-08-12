@@ -15,7 +15,7 @@
 defmodule Sencha.User.Command.Motd do
   @moduledoc false
   def handle(
-        state,
+        state = %Sencha.User{target: target},
         socket,
         _message
       ) do
@@ -24,21 +24,21 @@ defmodule Sencha.User.Command.Motd do
     messages =
       case motd do
         :nomotd ->
-          [Sencha.User.Numeric.encode(:ERR_NOMOTD, state.target)]
+          [Sencha.User.Numeric.encode(:ERR_NOMOTD, target)]
 
         motd ->
           [
-            Sencha.User.Numeric.encode(:RPL_MOTDSTART, state.target),
+            Sencha.User.Numeric.encode(:RPL_MOTDSTART, target),
             for line <- motd do
-              Sencha.User.Numeric.encode(:RPL_MOTD, state.target, %{line: line})
+              Sencha.User.Numeric.encode(:RPL_MOTD, target, %{line: line})
             end,
-            Sencha.User.Numeric.encode(:RPL_ENDOFMOTD, state.target)
+            Sencha.User.Numeric.encode(:RPL_ENDOFMOTD, target)
           ]
           |> List.flatten()
       end
 
     for m <- messages do
-      Sencha.User.message_send(socket, m)
+      Sencha.User.message_send(socket, m, target)
     end
 
     state

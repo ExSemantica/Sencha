@@ -15,15 +15,15 @@
 defmodule Sencha.User.Command.Lusers do
   @moduledoc false
   def handle(
-        state,
+        state = %Sencha.User{target: target},
         socket,
         _message
       ) do
     for m <- [
-          Sencha.User.Numeric.encode(:RPL_LUSERCLIENT, state.target),
-          Sencha.User.Numeric.encode(:RPL_LUSERME, state.target)
+          Sencha.User.Numeric.encode(:RPL_LUSERCLIENT, target),
+          Sencha.User.Numeric.encode(:RPL_LUSERME, target)
         ] do
-      Sencha.User.message_send(socket, m)
+      Sencha.User.message_send(socket, m, target)
     end
 
     state

@@ -18,7 +18,7 @@ defmodule Sencha.User.Command.Notice do
   def handle(
         state = %Sencha.User{target: target},
         socket,
-        %Sencha.Message{middle: ["#" <> channel], trailing: text}
+        %Sencha.Message{middle: ["#" <> channel], trailing: text, tags: tags}
       ) do
     :mnesia.transaction(fn ->
       case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
@@ -26,48 +26,35 @@ defmodule Sencha.User.Command.Notice do
           :ok
 
         [
-          {Sencha.Channel.Roster, real_channel, targets, _attributes, modes}
+          broadcast
         ] ->
-          matchee = target |> Sencha.Prefix.encode()
-
-          banned? =
-            modes[?b]
-            |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
-
-          exception? =
-            modes[?e]
-            |> Enum.any?(&Sencha.Mask.match?(matchee, &1 |> Sencha.Prefix.encode()))
-
-          cond do
-            banned? and not exception? ->
-              # Silently fail if this user is banned
-              :ok
-
-            Map.has_key?(modes, ?n) and target not in targets ->
-              Sencha.User.message_send(
-                socket,
-                Sencha.User.Numeric.encode(:ERR_CANNOTSENDTOCHAN, target, %{
-                  channel: channel
-                })
+          Sencha.Channel.try_broadcast(
+            broadcast,
+            target,
+            fn real_channel, sender, recipient ->
+              Sencha.User.remote_send(
+                %Sencha.Message{
+                  prefix: sender,
+                  command: "NOTICE",
+                  middle: [real_channel],
+                  trailing: text
+                },
+                String.downcase(recipient.nickname),
+                tags
               )
-
-            true ->
-              origin = target |> Sencha.Prefix.encode()
-
-              for t <- targets do
-                if target != t do
-                  Sencha.User.remote_send(
-                    %Sencha.Message{
-                      prefix: origin,
-                      command: "NOTICE",
-                      middle: [real_channel],
-                      trailing: text
-                    },
-                    String.downcase(t.nickname)
-                  )
-                end
+            end,
+            %{
+              on_not_in_channel: fn ->
+                Sencha.User.message_send(
+                  socket,
+                  Sencha.User.Numeric.encode(:ERR_CANNOTSENDTOCHAN, target, %{
+                    channel: channel
+                  }),
+                  target
+                )
               end
-          end
+            }
+          )
       end
     end)
 
@@ -77,7 +64,7 @@ defmodule Sencha.User.Command.Notice do
   def handle(
         state = %Sencha.User{target: target},
         socket,
-        %Sencha.Message{middle: [user], trailing: text}
+        %Sencha.Message{middle: [user], trailing: text, tags: tags}
       ) do
     user_hash = String.downcase(user)
 
@@ -87,11 +74,12 @@ defmodule Sencha.User.Command.Notice do
           socket,
           Sencha.User.Numeric.encode(:ERR_NOSUCHNICK, target, %{
             nick: user
-          })
+          }),
+          target
         )
 
       _pid ->
-        Sencha.User.send_away_status(user_hash, String.downcase(target.nickname))
+        Sencha.User.send_away_status(user_hash, target)
 
         Sencha.User.remote_send(
           %Sencha.Message{
@@ -100,7 +88,8 @@ defmodule Sencha.User.Command.Notice do
             middle: [target.nickname],
             trailing: text
           },
-          user_hash
+          user_hash,
+          tags
         )
     end
 

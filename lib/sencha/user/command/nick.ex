@@ -69,7 +69,8 @@ defmodule Sencha.User.Command.Nick do
               prefix: target |> Sencha.Prefix.encode(),
               command: "NICK",
               middle: nick
-            }
+            },
+            target
           )
 
           %{state | nick?: true, target: %{target | nickname: nick}}
@@ -77,7 +78,8 @@ defmodule Sencha.User.Command.Nick do
         :already_in_use ->
           Sencha.User.message_send(
             socket,
-            Sencha.User.Numeric.encode(:ERR_NICKNAMEINUSE, state.target)
+            Sencha.User.Numeric.encode(:ERR_NICKNAMEINUSE, target),
+            target
           )
 
           state
@@ -85,7 +87,8 @@ defmodule Sencha.User.Command.Nick do
     else
       Sencha.User.message_send(
         socket,
-        Sencha.User.Numeric.encode(:ERR_ERRONEOUSNICKNAME, state.target)
+        Sencha.User.Numeric.encode(:ERR_ERRONEOUSNICKNAME, target),
+        target
       )
 
       state
@@ -93,13 +96,14 @@ defmodule Sencha.User.Command.Nick do
   end
 
   def handle(
-        state,
+        state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{middle: []}
       ) do
     Sencha.User.message_send(
       socket,
-      Sencha.User.Numeric.encode(:ERR_NONICKNAMEGIVEN, state.target)
+      Sencha.User.Numeric.encode(:ERR_NONICKNAMEGIVEN, target),
+      target
     )
 
     state

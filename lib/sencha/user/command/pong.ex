@@ -14,7 +14,6 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Pong do
   @moduledoc false
-
   def handle(
         state = %Sencha.User{
           last_token: last_token,
@@ -39,13 +38,12 @@ defmodule Sencha.User.Command.Pong do
     end
   end
 
-  def handle(state, socket, %Sencha.Message{middle: []}) do
-    Sencha.User.message_send(
-      socket,
-      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, state.target, %{command: "PONG"})
-    )
-
-    state
+  def handle(state, socket, message = %Sencha.Message{middle: [], trailing: token}) when not is_nil(token) do
+    handle(state, socket, %Sencha.Message{
+      message
+      | middle: token |> String.split(" "),
+        trailing: nil
+    })
   end
 
   def handle(state, _socket, _message) do

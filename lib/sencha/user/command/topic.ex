@@ -30,7 +30,7 @@ defmodule Sencha.User.Command.Topic do
             socket,
             Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
               channel: channel
-            })
+            }),target
           )
 
         [
@@ -48,7 +48,8 @@ defmodule Sencha.User.Command.Topic do
                 socket,
                 Sencha.User.Numeric.encode(:ERR_NOTONCHANNEL, target, %{
                   channel: real_channel
-                })
+                }),
+                target
               )
 
             is_nil(topic) ->
@@ -56,7 +57,8 @@ defmodule Sencha.User.Command.Topic do
                 socket,
                 Sencha.User.Numeric.encode(:RPL_NOTOPIC, target, %{
                   channel: real_channel
-                })
+                }),
+                target
               )
 
             true ->
@@ -65,7 +67,8 @@ defmodule Sencha.User.Command.Topic do
                 Sencha.User.Numeric.encode(:RPL_TOPIC, target, %{
                   channel: real_channel,
                   topic: topic
-                })
+                }),
+                target
               )
 
               Sencha.User.message_send(
@@ -74,7 +77,8 @@ defmodule Sencha.User.Command.Topic do
                   channel: real_channel,
                   who: topic_changed_by,
                   set_at: topic_changed |> DateTime.to_unix()
-                })
+                }),
+                target
               )
           end
       end

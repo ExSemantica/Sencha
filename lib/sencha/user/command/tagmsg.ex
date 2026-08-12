@@ -1,4 +1,4 @@
-# Dispatch IRCv3 command PRIVMSG
+# Dispatch IRCv3 command TAGMSG
 # Copyright 2026 Roland Metivier
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,15 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-defmodule Sencha.User.Command.Privmsg do
+defmodule Sencha.User.Command.Tagmsg do
   @moduledoc false
-
   def handle(
-        state = %Sencha.User{target: target},
-        socket,
-        %Sencha.Message{middle: ["#" <> channel], trailing: text, tags: tags}
+        state = %Sencha.User{capabilities: caps, target: target},
+        _socket,
+        %Sencha.Message{middle: ["#" <> channel], tags: tags}
       ) do
-    :mnesia.transaction(fn ->
+    tags? =
+      case caps do
+        {:ok, check_cap} when not is_nil(tags) -> MapSet.member?(check_cap, "message-tags")
+        _ -> false
+      end
+
+    if tags? do
+      :mnesia.transaction(fn ->
       case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
         [] ->
           :ok
@@ -35,48 +41,31 @@ defmodule Sencha.User.Command.Privmsg do
               Sencha.User.remote_send(
                 %Sencha.Message{
                   prefix: sender,
-                  command: "PRIVMSG",
-                  middle: [real_channel],
-                  trailing: text
+                  command: "TAGMSG",
+                  middle: [real_channel]
                 },
                 String.downcase(recipient.nickname),
                 tags
               )
             end,
-            %{
-              on_not_in_channel: fn ->
-                Sencha.User.message_send(
-                  socket,
-                  Sencha.User.Numeric.encode(:ERR_CANNOTSENDTOCHAN, target, %{
-                    channel: channel
-                  }),
-                  target
-                )
-              end
-            }
-          )
-      end
-    end)
+            %{}
+          ) end
+      end)
+    end
 
     state
   end
 
   def handle(
         state = %Sencha.User{target: target},
-        socket,
+        _socket,
         %Sencha.Message{middle: [user], trailing: text, tags: tags}
       ) do
     user_hash = String.downcase(user)
 
     case :global.whereis_name({Sencha.User, user_hash}) do
       :undefined ->
-        Sencha.User.message_send(
-          socket,
-          Sencha.User.Numeric.encode(:ERR_NOSUCHNICK, target, %{
-            nick: user
-          }),
-          target
-        )
+        :ok
 
       _pid ->
         Sencha.User.send_away_status(user_hash, target)
@@ -84,7 +73,7 @@ defmodule Sencha.User.Command.Privmsg do
         Sencha.User.remote_send(
           %Sencha.Message{
             prefix: target |> Sencha.Prefix.encode(),
-            command: "PRIVMSG",
+            command: "NOTICE",
             middle: [target.nickname],
             trailing: text
           },
@@ -94,10 +83,6 @@ defmodule Sencha.User.Command.Privmsg do
     end
 
     state
-  end
-
-  def handle(state, socket, message = %Sencha.Message{middle: [user, one]}) do
-    handle(state, socket, %Sencha.Message{message | middle: [user], trailing: one})
   end
 
   def handle(state, _socket, _message) do

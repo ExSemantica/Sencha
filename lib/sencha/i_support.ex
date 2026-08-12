@@ -26,6 +26,7 @@ defmodule Sencha.ISupport do
       "CHANMODES=#{?a..?d |> Enum.map(&(Sencha.Channel.modes(&1) |> MapSet.to_list())) |> Enum.intersperse(",") |> to_string}",
       "CHANNELLEN=#{Sencha.Constrain.Channel.max_length_name()}",
       "CHANTYPES=#{Sencha.Constrain.Channel.supported_prefixes() |> to_string()}",
+      "CLIENTTAGDENY=*,-typing",
       # TODO: ELIST
       "EXCEPTS=e",
       # TODO: EXTBAN

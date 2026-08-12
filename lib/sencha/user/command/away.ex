@@ -23,7 +23,7 @@ defmodule Sencha.User.Command.Away do
       ) do
     Sencha.User.message_send(
       socket,
-      Sencha.User.Numeric.encode(:RPL_UNAWAY, target)
+      Sencha.User.Numeric.encode(:RPL_UNAWAY, target),target
     )
 
     %Sencha.User{state | away_status: nil}
@@ -41,7 +41,7 @@ defmodule Sencha.User.Command.Away do
     if byte_size(status) <= Sencha.Constrain.User.max_length_away() do
       Sencha.User.message_send(
         socket,
-        Sencha.User.Numeric.encode(:RPL_NOWAWAY, target)
+        Sencha.User.Numeric.encode(:RPL_NOWAWAY, target),target
       )
 
       %Sencha.User{state | away_status: status}

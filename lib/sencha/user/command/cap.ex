@@ -14,7 +14,7 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Cap do
   @moduledoc false
-  def capabilities, do: %{"sencha/test" => nil}
+  def capabilities, do: %{"sencha/test" => nil, "message-tags" => nil}
 
   # ===========================================================================
   # CAP LS
@@ -28,7 +28,7 @@ defmodule Sencha.User.Command.Cap do
       capabilities()
       |> Map.to_list()
       |> Enum.map_join(" ", fn {k, v} ->
-        if is_nil(k) do
+        if is_nil(v) do
           k
         else
           "#{k}=#{v}"
@@ -44,7 +44,8 @@ defmodule Sencha.User.Command.Cap do
             command: "CAP",
             middle: [target[:nickname] || "*", "LS"],
             trailing: got
-          }
+          },
+          target
         )
 
       [] ->
@@ -56,7 +57,8 @@ defmodule Sencha.User.Command.Cap do
             command: "CAP",
             middle: [target[:nickname] || "*", "LS"],
             trailing: got
-          }
+          },
+          target
         )
 
       _ ->
@@ -86,7 +88,8 @@ defmodule Sencha.User.Command.Cap do
         command: "CAP",
         middle: [target.nickname, "LIST"],
         trailing: enabled |> MapSet.to_list() |> Enum.join(" ")
-      }
+      },
+      target
     )
 
     state
@@ -98,10 +101,8 @@ defmodule Sencha.User.Command.Cap do
   def handle(
         state = %Sencha.User{target: target, capabilities: caps},
         socket,
-        message = %Sencha.Message{middle: ["REQ" | wanted]}
+        %Sencha.Message{middle: ["REQ" | wanted]}
       ) do
-    IO.inspect(state)
-    IO.inspect(message)
     wanted_on = wanted |> Enum.reject(&String.starts_with?(&1, "-")) |> MapSet.new()
 
     wanted_off =
@@ -148,7 +149,8 @@ defmodule Sencha.User.Command.Cap do
                 chunk
               ]
               |> List.flatten()
-          }
+          },
+          target
         )
       end
     end
@@ -165,7 +167,8 @@ defmodule Sencha.User.Command.Cap do
             chunks_rev_last
           ]
           |> List.flatten()
-      }
+      },
+      target
     )
 
     if length(MapSet.to_list(no)) > 0 do
@@ -193,7 +196,8 @@ defmodule Sencha.User.Command.Cap do
                   chunk
                 ]
                 |> List.flatten()
-            }
+            },
+            target
           )
         end
       end
@@ -210,7 +214,7 @@ defmodule Sencha.User.Command.Cap do
               chunks_rev_last
             ]
             |> List.flatten()
-        }
+        },target
       )
     end
 

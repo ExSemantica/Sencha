@@ -15,7 +15,7 @@
 defmodule Sencha.User.Command.Mode do
   @moduledoc false
   @modes_viewable_by_default [?n]
-  # TODO: user modes?
+  # TODO: mutation of user and channel modes?
   def handle(
         state = %Sencha.User{target: target},
         socket,
@@ -29,7 +29,7 @@ defmodule Sencha.User.Command.Mode do
             socket,
             Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
               channel: "#" <> channel
-            })
+            }),target
           )
 
         [
@@ -43,7 +43,7 @@ defmodule Sencha.User.Command.Mode do
               modes_map:
                 modes
                 |> Enum.filter(fn {k, _} -> k in @modes_viewable_by_default end)
-            })
+            }),target
           )
       end
     end)

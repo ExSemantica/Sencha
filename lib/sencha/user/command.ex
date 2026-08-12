@@ -82,6 +82,14 @@ defmodule Sencha.User.Command do
     state |> __MODULE__.Away.handle(socket, message)
   end
 
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "WHO"}) do
+    state |> __MODULE__.Who.handle(socket, message)
+  end
+
+  def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "TAGMSG"}) do
+    state |> __MODULE__.Tagmsg.handle(socket, message)
+  end
+
   def handle(state = %Sencha.User{}, _socket, message = %Sencha.Message{}) do
     Logger.warning("Unknown command received, check debug log")
     Logger.debug(message)

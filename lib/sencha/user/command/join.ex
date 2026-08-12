@@ -18,10 +18,10 @@ defmodule Sencha.User.Command.Join do
         state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{
-          middle: [channel]
+          middle: ["#" <> channel]
         }
       ) do
-    state |> Sencha.Channel.join(socket, channel, target)
+    state |> Sencha.Channel.join(socket, "#" <> channel, target)
   end
 
   def handle(state, _socket, _message) do

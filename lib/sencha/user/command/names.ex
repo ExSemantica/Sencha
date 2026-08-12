@@ -30,7 +30,7 @@ defmodule Sencha.User.Command.Names do
             socket,
             Sencha.User.Numeric.encode(:RPL_ENDOFNAMES, target, %{
               channel: channel
-            })
+            }),target
           )
 
         [{Sencha.Channel.Roster, real_channel, targets, _attributes, modes}] ->
@@ -63,14 +63,14 @@ defmodule Sencha.User.Command.Names do
             Sencha.User.Numeric.encode(:RPL_NAMREPLY, target, %{
               channel: real_channel,
               user_data: users_prefixes
-            })
+            }),target
           )
 
           Sencha.User.message_send(
             socket,
             Sencha.User.Numeric.encode(:RPL_ENDOFNAMES, target, %{
               channel: real_channel
-            })
+            }),target
           )
       end
     end)

@@ -33,7 +33,8 @@ defmodule Sencha.User do
     :gecos,
     :capabilities,
     :channel_hashes,
-    :away_status
+    :away_status,
+    :via
   ]
 
   @max_connections 250
@@ -42,6 +43,7 @@ defmodule Sencha.User do
   @ping_hard_milliseconds 120_000
   @flood_amount 5
   @flood_milliseconds 1_000
+  @tag_whitelist ["+typing"]
 
   @doc """
   Interval in milliseconds to issue a ping
@@ -71,13 +73,13 @@ defmodule Sencha.User do
   @doc """
   Sends a `Sencha.Message` when the socket is known
   """
-  def message_send(socket, message) do
+  def message_send(socket, message, target) do
     # TODO: How should we handle lengthy (>510 bytes) messages here?
     {:ok, data} =
       message
       |> Sencha.Message.encode()
 
-    Logger.debug(message)
+    Logger.debug(target: target, message: message)
 
     socket |> ThousandIsland.Socket.send(data <> "\r\n")
 
@@ -87,8 +89,8 @@ defmodule Sencha.User do
   @doc """
   Sends a `Sencha.Message` if only the username is known
   """
-  def remote_send(message, user_hash) do
-    :global.send({__MODULE__, user_hash}, {:remote_send, message})
+  def remote_send(message, user_hash, client_tags \\ nil) do
+    :global.send({__MODULE__, user_hash}, {:remote_send, message, client_tags})
   end
 
   @doc """
@@ -103,11 +105,12 @@ defmodule Sencha.User do
   Disconnect yourself from the IRC server
   """
   def disconnect(
-         socket,
-         target,
-         reason,
-         channel_hashes
-       ) do
+        socket,
+        target,
+        reason,
+        channel_hashes
+      ) do
+
     if not is_nil(target[:nickname]) do
       nick_hash = String.downcase(target.nickname)
 
@@ -180,8 +183,19 @@ defmodule Sencha.User do
   @doc """
   Send an away status to this user, **will use globals table**
   """
-  def send_away_status(user_hash, respond_to_hash) do
-    :global.send({__MODULE__, user_hash}, {:send_away_status, respond_to_hash})
+  def send_away_status(user_hash, respond_to_target) do
+    :global.send({__MODULE__, user_hash}, {:send_away_status, respond_to_target})
+  end
+
+  @doc """
+  Send a WHO status to this user, **will use globals table**
+  """
+  def send_who(user_hash, respond_to_target, counter_ref, channel \\ "*") do
+    :global.send(
+      {__MODULE__, user_hash},
+      {:send_who, respond_to_target, channel, Application.fetch_env!(:sencha, :hostname),
+       counter_ref}
+    )
   end
 
   # ===========================================================================
@@ -195,12 +209,15 @@ defmodule Sencha.User do
     case kline do
       nil ->
         socket
-        |> message_send(%Sencha.Message{
-          prefix: Application.fetch_env!(:sencha, :hostname),
-          command: "NOTICE",
-          middle: ["*"],
-          trailing: "Checking your hostname..."
-        })
+        |> message_send(
+          %Sencha.Message{
+            prefix: Application.fetch_env!(:sencha, :hostname),
+            command: "NOTICE",
+            middle: ["*"],
+            trailing: "Checking your hostname..."
+          },
+          nil
+        )
 
         Task.async(fn ->
           __MODULE__.ReverseDNS.lookup(peer_ip)
@@ -218,7 +235,8 @@ defmodule Sencha.User do
            nick?: false,
            user?: false,
            capabilities: :wait_for_caps,
-           channel_hashes: []
+           channel_hashes: [],
+           via: Application.fetch_env!(:sencha, :hostname)
          }, {:persistent, :infinity}}
 
       {id, reason} ->
@@ -286,16 +304,56 @@ defmodule Sencha.User do
   # ===========================================================================
   @impl GenServer
   def handle_info(
-        {:send_away_status, respond_to_hash},
+        {:send_away_status, respond_to_target},
         {socket, state = %__MODULE__{target: target, away_status: away_status}}
       ) do
     if not is_nil(away_status) do
       remote_send(
-        Sencha.User.Numeric.encode(:ERR_CANNOTSENDTOCHAN, target, %{
+        Sencha.User.Numeric.encode(:RPL_AWAY, target, %{
           nick: target.nickname,
           status: away_status
         }),
-        respond_to_hash
+        String.downcase(respond_to_target.nickname)
+      )
+    end
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(
+        {:send_who, respond_to_target, channel, respond_via, counter},
+        {socket,
+         state = %__MODULE__{via: via, target: target, away_status: away_status, gecos: gecos}}
+      ) do
+    # Per Erlang/OTP recommendation all nodes should be connected in a star
+    # topology when `:global` is being used
+    hops = if via == respond_via, do: "0", else: "1"
+    flags = if is_nil(away_status), do: "H", else: "G"
+    responder = String.downcase(respond_to_target.nickname)
+
+    remote_send(
+      Sencha.User.Numeric.encode(:RPL_WHOREPLY, target, %{
+        channel: channel,
+        username: target.user,
+        host: target.host,
+        server: via,
+        nick: target.nickname,
+        flags: flags,
+        hops: hops,
+        real_name: gecos
+      }),
+      responder
+    )
+
+    :counters.sub(counter, 1, 1)
+
+    if :counters.get(counter, 1) == 0 do
+      remote_send(
+        Sencha.User.Numeric.encode(:RPL_ENDOFWHO, target, %{
+          mask: channel
+        }),
+        responder
       )
     end
 
@@ -310,13 +368,18 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_info(:ping_soft, {socket, state = %__MODULE__{last_token: last_token}}) do
+  def handle_info(
+        :ping_soft,
+        {socket, state = %__MODULE__{target: target, last_token: last_token}}
+      ) do
     socket
-    |> message_send(%Sencha.Message{
-      prefix: Application.fetch_env!(:sencha, :hostname),
-      command: "PING",
-      middle: ["Sencha-#{last_token}"]
-    })
+    |> message_send(
+      %Sencha.Message{
+        command: "PING",
+        trailing: "Sencha-#{last_token}"
+      },
+      target
+    )
 
     {:noreply, {socket, state}}
   end
@@ -337,20 +400,27 @@ defmodule Sencha.User do
   @impl GenServer
   def handle_info(
         :flush,
-        {socket, state = %__MODULE__{message_queue: message_queue}}
+        {socket, state = %__MODULE__{target: target, message_queue: message_queue}}
       ) do
     if :queue.is_empty(message_queue) do
       {:noreply, {socket, %{state | message_queue: message_queue}}}
     else
       message = message_queue |> :queue.head()
-      {:ok, decoded} = Sencha.Message.decode(message)
 
       state =
-        state
-        |> message_recv(
-          socket,
-          decoded
-        )
+        case Sencha.Message.decode(message) do
+          {:ok, decoded} ->
+            state
+            |> message_recv(
+              socket,
+              decoded
+            )
+
+          {:error, :too_many_tags} ->
+            # Per IRCv3 specification
+            socket |> message_send(Sencha.User.Numeric.encode(target, :ERR_INPUTTOOLONG), target)
+            state
+        end
 
       send(self(), :flush)
 
@@ -392,34 +462,43 @@ defmodule Sencha.User do
       case host do
         {:ok, host} ->
           socket
-          |> message_send(%Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :hostname),
-            command: "NOTICE",
-            middle: ["*"],
-            trailing: "Found your hostname"
-          })
+          |> message_send(
+            %Sencha.Message{
+              prefix: Application.fetch_env!(:sencha, :hostname),
+              command: "NOTICE",
+              middle: ["*"],
+              trailing: "Found your hostname"
+            },
+            nil
+          )
 
           host
 
         {:error, _error} ->
           socket
-          |> message_send(%Sencha.Message{
-            prefix: Application.fetch_env!(:sencha, :hostname),
-            command: "NOTICE",
-            middle: ["*"],
-            trailing: "Couldn't look up your hostname"
-          })
+          |> message_send(
+            %Sencha.Message{
+              prefix: Application.fetch_env!(:sencha, :hostname),
+              command: "NOTICE",
+              middle: ["*"],
+              trailing: "Couldn't look up your hostname"
+            },
+            nil
+          )
 
           peer_ip |> :inet.ntoa() |> to_string
       end
 
     socket
-    |> message_send(%Sencha.Message{
-      prefix: Application.fetch_env!(:sencha, :hostname),
-      command: "NOTICE",
-      middle: ["*"],
-      trailing: "Your hostname or IP address is " <> host
-    })
+    |> message_send(
+      %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
+        command: "NOTICE",
+        middle: ["*"],
+        trailing: "Your hostname or IP address is " <> host
+      },
+      nil
+    )
 
     {:ok, connections} = gather()
 
@@ -444,8 +523,36 @@ defmodule Sencha.User do
   end
 
   @impl GenServer
-  def handle_info({:remote_send, message}, {socket, state}) do
-    socket |> message_send(message)
+  def handle_info(
+        {:remote_send, message = %Sencha.Message{command: command}, client_tags},
+        {socket, state = %__MODULE__{target: target, capabilities: caps}}
+      ) do
+    tags? =
+      case caps do
+        {:ok, check_cap} when not is_nil(client_tags) -> MapSet.member?(check_cap, "message-tags")
+        _ -> false
+      end
+
+    cond do
+      tags? and not is_nil(client_tags) ->
+        socket
+        |> message_send(
+          %Sencha.Message{
+            message
+            | s_tags: client_tags |> Map.filter(fn {k, _} -> String.starts_with?(k, "+") end),
+              tags: nil
+          },
+          target
+        )
+
+      command == "TAGMSG" ->
+        # TAGMSG is ignored when client does not support tags
+        socket
+
+      true ->
+        # Otherwise we can just send
+        socket |> message_send(message, target)
+    end
 
     {:noreply, {socket, state}}
   end
@@ -469,7 +576,7 @@ defmodule Sencha.User do
 
     if InetCidr.contains?(cidr, peer_ip) do
       socket
-      |> message_send(__MODULE__.Numeric.encode(:ERR_YOUREBANNEDCREEP, target, %{}))
+      |> message_send(__MODULE__.Numeric.encode(:ERR_YOUREBANNEDCREEP, target, %{}), target)
       |> disconnect(target, "Banned (##{id}) (#{reason})", hashes)
     end
 
@@ -480,15 +587,38 @@ defmodule Sencha.User do
   # Private functions
   # ===========================================================================
   defp message_recv(
-         state = %__MODULE__{timeout_auth: timeout_auth},
+         state = %__MODULE__{target: target, timeout_auth: timeout_auth, capabilities: caps},
          socket,
-         message
+         message = %Sencha.Message{tags: tags}
        ) do
-    Logger.debug(message)
+    Logger.debug(target: target, message: message)
+
+    tags? =
+      case caps do
+        {:ok, check_cap} -> MapSet.member?(check_cap, "message-tags")
+        _ -> false
+      end
+
+    # Sanitize if message tags are not supported
+    message =
+      if tags? do
+        if is_nil(tags) do
+          message
+        else
+          # Sanitize non-supported message tags
+          %Sencha.Message{
+            message
+            | tags: tags |> Map.filter(fn {k, _} -> k in @tag_whitelist end)
+          }
+        end
+      else
+        %Sencha.Message{message | tags: nil, s_tags: nil}
+      end
 
     state =
       %__MODULE__{nick?: nick?, user?: user?, capabilities: caps_state} =
-      state |> __MODULE__.Command.handle(socket, message)
+      state
+      |> __MODULE__.Command.handle(socket, message)
 
     caps? =
       case caps_state do

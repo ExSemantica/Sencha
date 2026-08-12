@@ -14,7 +14,7 @@
 # limitations under the License.
 defmodule Sencha.User.Welcome do
   @moduledoc false
-  def send_burst(state, socket) do
+  def send_burst(state = %Sencha.User{target: target}, socket) do
     supported = Sencha.ISupport.get() |> Enum.chunk_every(13)
 
     welcome_burst =
@@ -30,7 +30,7 @@ defmodule Sencha.User.Welcome do
       |> List.flatten()
 
     for w <- welcome_burst do
-      Sencha.User.message_send(socket, w)
+      Sencha.User.message_send(socket, w, target)
     end
 
     Sencha.User.Command.handle(state, socket, %Sencha.Message{command: "LUSERS"})
