@@ -58,10 +58,16 @@ defmodule Sencha.User.Command.Tagmsg do
   end
 
   def handle(
-        state = %Sencha.User{target: target},
+        state = %Sencha.User{target: target, capabilities: caps},
         _socket,
         %Sencha.Message{middle: [user], tags: tags}
       ) do
+    tags? =
+      case caps do
+        {:ok, check_cap} when not is_nil(tags) -> MapSet.member?(check_cap, "message-tags")
+        _ -> false
+      end
+    if tags? do
     user_hash = String.downcase(user)
 
     case :global.whereis_name({Sencha.User, user_hash}) do
@@ -81,6 +87,7 @@ defmodule Sencha.User.Command.Tagmsg do
           tags
         )
     end
+  end
 
     state
   end
