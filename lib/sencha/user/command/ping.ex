@@ -35,6 +35,7 @@ defmodule Sencha.User.Command.Ping do
     Sencha.User.message_send(
       socket,
       %Sencha.Message{
+        prefix: Application.fetch_env!(:sencha, :hostname),
         command: "PONG",
         middle: [token]
       },
