@@ -27,29 +27,30 @@ defmodule Sencha.User.Command.Tagmsg do
 
     if tags? do
       :mnesia.transaction(fn ->
-      case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
-        [] ->
-          :ok
+        case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
+          [] ->
+            :ok
 
-        [
-          broadcast
-        ] ->
-          Sencha.Channel.try_broadcast(
-            broadcast,
-            target,
-            fn real_channel, sender, recipient ->
-              Sencha.User.remote_send(
-                %Sencha.Message{
-                  prefix: sender,
-                  command: "TAGMSG",
-                  middle: [real_channel]
-                },
-                String.downcase(recipient.nickname),
-                tags
-              )
-            end,
-            %{}
-          ) end
+          [
+            broadcast
+          ] ->
+            Sencha.Channel.try_broadcast(
+              broadcast,
+              target,
+              fn real_channel, sender, recipient ->
+                Sencha.User.remote_send(
+                  %Sencha.Message{
+                    prefix: sender,
+                    command: "TAGMSG",
+                    middle: [real_channel]
+                  },
+                  String.downcase(recipient.nickname),
+                  tags
+                )
+              end,
+              %{}
+            )
+        end
       end)
     end
 
@@ -59,7 +60,7 @@ defmodule Sencha.User.Command.Tagmsg do
   def handle(
         state = %Sencha.User{target: target},
         _socket,
-        %Sencha.Message{middle: [user], trailing: text, tags: tags}
+        %Sencha.Message{middle: [user], tags: tags}
       ) do
     user_hash = String.downcase(user)
 
@@ -73,9 +74,8 @@ defmodule Sencha.User.Command.Tagmsg do
         Sencha.User.remote_send(
           %Sencha.Message{
             prefix: target |> Sencha.Prefix.encode(),
-            command: "NOTICE",
-            middle: [target.nickname],
-            trailing: text
+            command: "TAGMSG",
+            middle: [target.nickname]
           },
           user_hash,
           tags
