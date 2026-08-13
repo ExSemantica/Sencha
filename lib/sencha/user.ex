@@ -105,6 +105,10 @@ defmodule Sencha.User do
     :global.send({__MODULE__, user_hash}, {:disconnect, reason})
   end
 
+  def remote_chghost(user_hash, state, new_target) do
+    :global.send({__MODULE__, user_hash}, {:chghost, state, new_target})
+  end
+
   @doc """
   Disconnect yourself from the IRC server
   """
@@ -162,6 +166,43 @@ defmodule Sencha.User do
 
     socket |> ThousandIsland.Socket.send(data <> "\r\n")
     socket |> ThousandIsland.Socket.shutdown(:read_write)
+
+    :ok
+  end
+
+  @doc """
+  Change the ident and/or hostmask
+  """
+  def change_host(state = %__MODULE__{channel_hashes: channel_hashes, target: target}, new_target) do
+    nick_hash = String.downcase(target.nickname)
+
+    neighbors =
+      channel_hashes
+      |> Enum.flat_map(&Sencha.Channel.gather_hashes/1)
+      |> MapSet.new()
+      |> MapSet.delete(nick_hash)
+      |> MapSet.to_list()
+
+    for channel_hash <- channel_hashes do
+      # ensure this did not error
+      {:atomic, :ok} =
+        :mnesia.transaction(fn ->
+          case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
+            [{Sencha.Channel.Roster, ^channel_hash, others, attributes, modes}] ->
+              # remove the old target
+              :mnesia.write(
+                {Sencha.Channel.Roster, channel_hash,
+                 [new_target | others |> List.delete(target)], attributes, modes}
+              )
+          end
+
+          :ok
+        end)
+    end
+
+    for neighbor <- neighbors do
+      Sencha.User.remote_chghost(neighbor, state, new_target)
+    end
 
     :ok
   end
@@ -324,12 +365,54 @@ defmodule Sencha.User do
 
   @impl GenServer
   def handle_info(
+        {:chghost, %__MODULE__{target: old_target, channel_hashes: channel_hashes}, new_target},
+        {socket, state = %__MODULE__{capabilities: caps, target: myself}}
+      ) do
+    chghost? =
+      case caps do
+        {:ok, check_cap} -> MapSet.member?(check_cap, "chghost")
+        _ -> false
+      end
+
+    messages =
+      if chghost? do
+        [
+          %Sencha.Message{
+            prefix: old_target |> Sencha.Prefix.encode(),
+            command: "CHGHOST",
+            middle: [new_target.user, new_target.host]
+          }
+        ]
+      else
+        [
+          %Sencha.Message{
+            prefix: old_target |> Sencha.Prefix.encode(),
+            command: "QUIT",
+            trailing: "Changing hostname"
+          }
+          | for hash <- channel_hashes do
+              Sencha.Channel.legacy_chghost(hash, new_target)
+            end
+        ] |> List.flatten()
+      end
+
+      for message <- messages do
+
+        message_send(socket, message, myself)
+      end
+
+
+    {:noreply, {socket, state}}
+  end
+
+  @impl GenServer
+  def handle_info(
         {:send_who, respond_to_target, channel, respond_via, counter},
         {socket,
          state = %__MODULE__{via: via, target: target, away_status: away_status, gecos: gecos}}
       ) do
-    # Per Erlang/OTP recommendation all nodes should be connected in a star
-    # topology when `:global` is being used
+    # Per Erlang/OTP recommendation all nodes should be connected in a fully
+    # connected mesh topology when `:global` is being used
     hops = if via == respond_via, do: "0", else: "1"
     flags = if is_nil(away_status), do: "H", else: "G"
     responder = String.downcase(respond_to_target.nickname)

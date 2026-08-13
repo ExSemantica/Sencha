@@ -22,8 +22,9 @@ defmodule Sencha.User.Command.Names do
           middle: [channel]
         }
       ) do
+        channel_hash = String.downcase(channel)
     :mnesia.transaction(fn ->
-      case :mnesia.read(Sencha.Channel.Roster, String.downcase(channel)) do
+      case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
         [] ->
           # Nobody on this channel
           Sencha.User.message_send(
@@ -33,7 +34,7 @@ defmodule Sencha.User.Command.Names do
             }),target
           )
 
-        [{Sencha.Channel.Roster, real_channel, targets, _attributes, modes}] ->
+        [{Sencha.Channel.Roster, ^channel_hash, targets, %Sencha.Channel{name: real_channel}, modes}] ->
           # People are on this channel
           users_prefixes =
             targets

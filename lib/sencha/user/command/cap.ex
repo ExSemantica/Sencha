@@ -14,7 +14,7 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Cap do
   @moduledoc false
-  def capabilities, do: %{"message-tags" => nil}
+  def capabilities, do: %{"message-tags" => nil, "chghost" => nil}
 
   # ===========================================================================
   # CAP LS
@@ -101,8 +101,15 @@ defmodule Sencha.User.Command.Cap do
   def handle(
         state = %Sencha.User{target: target, capabilities: caps},
         socket,
-        %Sencha.Message{middle: ["REQ" | wanted]}
+        %Sencha.Message{middle: ["REQ" | wanted], trailing: trailing}
       ) do
+    wanted =
+      if is_nil(trailing) do
+        wanted
+      else
+        trailing |> String.split(" ")
+      end
+
     wanted_on = wanted |> Enum.reject(&String.starts_with?(&1, "-")) |> MapSet.new()
 
     wanted_off =
@@ -214,7 +221,8 @@ defmodule Sencha.User.Command.Cap do
               chunks_rev_last
             ]
             |> List.flatten()
-        },target
+        },
+        target
       )
     end
 

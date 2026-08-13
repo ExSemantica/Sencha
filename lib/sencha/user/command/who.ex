@@ -20,8 +20,10 @@ defmodule Sencha.User.Command.Who do
         socket,
         %Sencha.Message{middle: ["#" <> channel]}
       ) do
+    channel_hash = String.downcase("#" <> channel)
+
     :mnesia.transaction(fn ->
-      case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
+      case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
         [] ->
           Sencha.User.message_send(
             socket,
@@ -31,7 +33,10 @@ defmodule Sencha.User.Command.Who do
             target
           )
 
-        [{Sencha.Channel.Roster, real_channel, targets, _attributes, _modes}] ->
+        [
+          {Sencha.Channel.Roster, ^channel_hash, targets, %Sencha.Channel{name: real_channel},
+           _modes}
+        ] ->
           # NOTE: Erlang has a global counter functionality so we can use that
           # in order to synchronize the WHO responses
 

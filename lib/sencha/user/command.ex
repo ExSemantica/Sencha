@@ -83,11 +83,11 @@ defmodule Sencha.User.Command do
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "WHO"}) do
-    state |> handle_registered(socket, &(&1 |>  __MODULE__.Who.handle(socket, message)))
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Who.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, socket, message = %Sencha.Message{command: "TAGMSG"}) do
-    state |> handle_registered(socket, &(&1 |>  __MODULE__.Tagmsg.handle(socket, message)))
+    state |> handle_registered(socket, &(&1 |> __MODULE__.Tagmsg.handle(socket, message)))
   end
 
   def handle(state = %Sencha.User{}, _socket, message = %Sencha.Message{}) do

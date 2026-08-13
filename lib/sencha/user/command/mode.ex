@@ -14,26 +14,154 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Mode do
   @moduledoc false
-  @modes_viewable_by_default [?n]
-  # TODO: mutation of user and channel modes?
+  @modes_viewable_by_default [?n, ?t]
+
+  def handle(
+        state = %Sencha.User{target: target},
+        socket,
+        %Sencha.Message{middle: ["#" <> channel, modes_keys | modes_vals]}
+      ) do
+    channel_hash = String.downcase("#" <> channel)
+    modes_keys = modes_keys |> to_charlist()
+
+    modes_adjust =
+      case hd(modes_keys) do
+        ?+ -> :add
+        ?- -> :del
+        other -> {:view, other}
+      end
+
+    modes_keys = tl(modes_keys)
+
+    :mnesia.transaction(fn ->
+      case :mnesia.read(__MODULE__.Roster, channel_hash) do
+        [
+          {__MODULE__.Roster, ^channel_hash, targets, %Sencha.Channel{name: real_channel},
+           %{?o => operators}}
+        ] ->
+          in_channel? = target in targets
+          operator? = target in operators
+
+          case modes_adjust do
+            {:view, ?b} ->
+              :unimplemented
+
+            {:view, ?e} ->
+              :unimplemented
+
+            :add when in_channel? and operator? ->
+              {_, mode_delta} =
+                modes_keys
+                |> Enum.map_reduce({%{}, modes_vals}, fn
+                  k, {acc, vals} ->
+                    have_param? =
+                      ?a..?c
+                      |> Enum.any?(fn t -> MapSet.member?(Sencha.Channel.modes(t), k) end)
+
+                    no_param? = MapSet.member?(Sencha.Channel.modes(?d), k)
+
+                    cond do
+                      no_param? ->
+                        {k, {acc |> put_in([k], nil), vals}}
+
+                      have_param? ->
+                        [v | vals] = vals
+                        {k, {acc |> put_in([k], v), vals}}
+                    end
+                end)
+
+              Sencha.Channel.update_modes_in_transaction(
+                channel_hash,
+                target,
+                mode_delta,
+                :add
+              )
+
+            :del when in_channel? and operator? ->
+              {_, mode_delta} =
+                modes_keys
+                |> Enum.map_reduce({%{}, modes_vals}, fn
+                  k, {acc, vals} ->
+                    have_param? =
+                      ?a..?b
+                      |> Enum.any?(fn t -> MapSet.member?(Sencha.Channel.modes(t), k) end)
+
+                    no_param? =
+                      ?c..?d
+                      |> Enum.any?(fn t -> MapSet.member?(Sencha.Channel.modes(t), k) end)
+
+                    cond do
+                      no_param? ->
+                        {k, {acc |> pop_in([k]), vals}}
+
+                      have_param? ->
+                        [_ | vals] = vals
+                        {k, {acc |> pop_in([k]), vals}}
+                    end
+                end)
+
+              Sencha.Channel.update_modes_in_transaction(
+                channel_hash,
+                target,
+                mode_delta,
+                :del
+              )
+
+            _ when not in_channel? ->
+              Sencha.User.message_send(
+                socket,
+                Sencha.User.Numeric.encode(:ERR_NOTONCHANNEL, target, %{
+                  channel: real_channel
+                }),
+                target
+              )
+
+            _ when not operator? ->
+              Sencha.User.message_send(
+                socket,
+                Sencha.User.Numeric.encode(:ERR_CHANOPPRIVSNEEDED, target, %{
+                  channel: real_channel
+                }),
+                target
+              )
+          end
+
+        [] ->
+          Sencha.User.message_send(
+            socket,
+            Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
+              channel: "#" <> channel
+            }),
+            target
+          )
+      end
+    end)
+
+    state
+  end
+
   def handle(
         state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{middle: ["#" <> channel]}
       ) do
+    channel_hash = String.downcase("#" <> channel)
+
     :mnesia.transaction(fn ->
-      case :mnesia.read(Sencha.Channel.Roster, String.downcase("#" <> channel)) do
+      case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
         [] ->
           # Nobody on this channel
           Sencha.User.message_send(
             socket,
             Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
               channel: "#" <> channel
-            }),target
+            }),
+            target
           )
 
         [
-          {Sencha.Channel.Roster, real_channel, _targets, _attributes, modes}
+          {Sencha.Channel.Roster, ^channel_hash, _targets, %Sencha.Channel{name: real_channel},
+           modes}
         ] ->
           Sencha.User.message_send(
             socket,
@@ -43,7 +171,8 @@ defmodule Sencha.User.Command.Mode do
               modes_map:
                 modes
                 |> Enum.filter(fn {k, _} -> k in @modes_viewable_by_default end)
-            }),target
+            }),
+            target
           )
       end
     end)

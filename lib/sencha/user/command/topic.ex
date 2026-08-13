@@ -14,28 +14,32 @@
 # limitations under the License.
 defmodule Sencha.User.Command.Topic do
   @moduledoc false
-
   def handle(
         state = %Sencha.User{target: target},
         socket,
         %Sencha.Message{
-          middle: [channel]
+          middle: [channel],
+          trailing: nil
         }
       ) do
+    channel_hash = String.downcase(channel)
+
     :mnesia.transaction(fn ->
-      case :mnesia.read(Sencha.Channel.Roster, String.downcase(channel)) do
+      case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
         [] ->
           # Nobody on this channel
           Sencha.User.message_send(
             socket,
             Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
               channel: channel
-            }),target
+            }),
+            target
           )
 
         [
-          {Sencha.Channel.Roster, real_channel, targets,
+          {Sencha.Channel.Roster, ^channel_hash, targets,
            %Sencha.Channel{
+             name: real_channel,
              topic: topic,
              topic_changed: topic_changed,
              topic_changed_by: topic_changed_by
@@ -83,6 +87,73 @@ defmodule Sencha.User.Command.Topic do
           end
       end
     end)
+
+    state
+  end
+
+  def handle(
+        state = %Sencha.User{target: target},
+        socket,
+        %Sencha.Message{
+          middle: [channel],
+          trailing: trailing
+        }
+      ) do
+    channel_hash = String.downcase(channel)
+
+    :mnesia.transaction(fn ->
+      case :mnesia.read(Sencha.Channel.Roster, channel_hash) do
+        [] ->
+          # Nobody on this channel
+          Sencha.User.message_send(
+            socket,
+            Sencha.User.Numeric.encode(:ERR_NOSUCHCHANNEL, target, %{
+              channel: channel
+            }),
+            target
+          )
+
+        [
+          {Sencha.Channel.Roster, ^channel_hash, targets, %Sencha.Channel{name: real_channel},
+           modes = %{?o => operators}}
+        ] ->
+          # People are on this channel
+          cond do
+            target not in targets ->
+              Sencha.User.message_send(
+                socket,
+                Sencha.User.Numeric.encode(:ERR_NOTONCHANNEL, target, %{
+                  channel: real_channel
+                }),
+                target
+              )
+
+            Map.has_key?(modes, ?t) and target not in operators ->
+              Sencha.User.message_send(
+                socket,
+                Sencha.User.Numeric.encode(:ERR_CHANOPPRIVSNEEDED, target, %{
+                  channel: real_channel
+                }),
+                target
+              )
+
+            true ->
+              Sencha.Channel.update_topic(channel_hash, trailing, target)
+          end
+      end
+    end)
+
+    state
+  end
+
+  def handle(state = %Sencha.User{target: target}, socket, %Sencha.Message{middle: []}) do
+    Sencha.User.message_send(
+      socket,
+      Sencha.User.Numeric.encode(:ERR_NEEDMOREPARAMS, target, %{
+        command: "TOPIC"
+      }),
+      target
+    )
 
     state
   end

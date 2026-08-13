@@ -67,27 +67,28 @@ defmodule Sencha.User.Command.Tagmsg do
         {:ok, check_cap} when not is_nil(tags) -> MapSet.member?(check_cap, "message-tags")
         _ -> false
       end
+
     if tags? do
-    user_hash = String.downcase(user)
+      user_hash = String.downcase(user)
 
-    case :global.whereis_name({Sencha.User, user_hash}) do
-      :undefined ->
-        :ok
+      case :global.whereis_name({Sencha.User, user_hash}) do
+        :undefined ->
+          :ok
 
-      _pid ->
-        Sencha.User.send_away_status(user_hash, target)
+        _pid ->
+          Sencha.User.send_away_status(user_hash, target)
 
-        Sencha.User.remote_send(
-          %Sencha.Message{
-            prefix: target |> Sencha.Prefix.encode(),
-            command: "TAGMSG",
-            middle: [target.nickname]
-          },
-          user_hash,
-          tags
-        )
+          Sencha.User.remote_send(
+            %Sencha.Message{
+              prefix: target |> Sencha.Prefix.encode(),
+              command: "TAGMSG",
+              middle: [target.nickname]
+            },
+            user_hash,
+            tags
+          )
+      end
     end
-  end
 
     state
   end
